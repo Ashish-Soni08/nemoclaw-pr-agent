@@ -20,7 +20,7 @@ Built for the NVIDIA Berlin Claw Agent Challenge (submissions close 2026-10-02).
 | Host | Lambda Cloud instance (no local model, so no GPU work) |
 | Repo discovery and context | Firecrawl Developer Index, GitHub REST API |
 | Chat | Telegram (OpenClaw channel) plus the built-in OpenClaw Control UI |
-| Record of work | Ledger in a Hugging Face bucket, read by a Next.js UI on Vercel ([ui.md](ui.md)) |
+| Record of work | Ledger in a public Hugging Face dataset, read by a Next.js UI on Vercel ([ui.md](ui.md)) |
 
 Structure follows NVIDIA's community recipes, mainly
 [PR Test Case Assistant](https://github.com/NVIDIA/nemoclaw-community/tree/main/examples/recipes/nvidia/pr-test-case-assistant)

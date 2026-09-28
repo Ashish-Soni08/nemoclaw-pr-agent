@@ -1,9 +1,9 @@
 # Ledger schema
 
-Draft v1. The agent writes, the UI reads. Stored in a Hugging Face bucket
-(`LEDGER_BUCKET`).
+Draft v1. The agent writes, the UI reads. Stored in a public Hugging Face dataset
+(`LEDGER_DATASET`), so every change is a commit anyone can inspect.
 
-## Layout in the bucket
+## Layout in the dataset
 
 ```
 runs/2026-09-29/r-0929-a.jsonl           one line per entry, in order
@@ -13,9 +13,10 @@ artifacts/r-0929-a/e-0929-a-028/tests.txt
 health/heartbeat.json                    overwritten on every heartbeat
 ```
 
-Buckets are mutable storage with no commit history, so the agent only ever
-appends lines to a run file and never rewrites an earlier line. The run file is
-synced during the run so the UI can show a run in progress.
+The agent only ever appends lines to a run file and never rewrites an earlier
+line; the dataset's commit history shows if that rule was ever broken. The run
+file is uploaded every few minutes during a run (one commit per upload) so the
+UI can show a run in progress. Diffs and test logs are paths in the dataset.
 
 ## Entry
 
@@ -37,7 +38,7 @@ One JSON object per line. Fields not relevant to an entry are left out.
 | `evidence` | array | `[{ kind, quote, source, url }]`, kind is `policy`, `comment`, `label`, `file` |
 | `steps` | array | `[{ label, detail }]`, the chain shown in the detail view |
 | `tests` | object | `{ baseline: { passed, failed }, after: { passed, failed } }` |
-| `artifacts` | object | `{ diff, tests, pr_url, comment_url }`, bucket paths or URLs |
+| `artifacts` | object | `{ diff, tests, pr_url, comment_url }`, dataset paths or URLs |
 | `counts` | object | Funnel numbers, on `discover-repos` and `run` entries |
 | `error` | object | `{ source, message, retried }` on `error` entries |
 

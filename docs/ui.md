@@ -8,7 +8,7 @@ looked up here, with the reason behind it. Mockup:
 
 | Topic | Decision |
 | --- | --- |
-| Data source | Ledger lives in a Hugging Face bucket (see [ledger/schema.md](../ledger/schema.md)) |
+| Data source | Ledger lives in a public Hugging Face dataset (see [ledger/schema.md](../ledger/schema.md)) |
 | Layout | One screen: health strip, daily funnel, then timeline and detail side by side |
 | Repos tab | Kept: AI-policy verdict per repo with the quoted policy text |
 | Health | Run records and heartbeats in the ledger, health strip on the page, stale-heartbeat alert |
@@ -30,11 +30,11 @@ looked up here, with the reason behind it. Mockup:
 ## Data flow
 
 ```
-agent (sandbox) --hf sync--> HF bucket --server fetch, HF read token--> Next.js on Vercel --> browser
+agent (sandbox) --hf upload--> public HF dataset --fetch--> Next.js on Vercel --> browser
 ```
 
-- The browser never talks to the bucket or the agent host. Next.js server code
-  reads the bucket with a read-only token kept in Vercel env vars.
+- The dataset is public, so Next.js reads it without a token. Only the agent
+  holds a write token.
 - The OpenClaw Gateway and the Lambda host are never reachable from the UI.
 - Pages revalidate on a short interval, so the page stays current without a
   database.
@@ -53,4 +53,3 @@ daily PR cap.
 ## Open
 
 - UI packages to add on top of Next.js (Ashish choosing).
-- Whether the bucket is private (server reads with a token) or public.
