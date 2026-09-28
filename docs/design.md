@@ -20,7 +20,7 @@ Built for the NVIDIA Berlin Claw Agent Challenge (submissions close 2026-10-02).
 | Host | Lambda Cloud instance (no local model, so no GPU work) |
 | Repo discovery and context | Firecrawl Developer Index, GitHub REST API |
 | Chat | Telegram (OpenClaw channel) plus the built-in OpenClaw Control UI |
-| Record of work | Ledger committed to a GitHub repo, read by a small custom UI |
+| Record of work | Ledger in a Hugging Face bucket, read by a Next.js UI on Vercel ([ui.md](ui.md)) |
 
 Structure follows NVIDIA's community recipes, mainly
 [PR Test Case Assistant](https://github.com/NVIDIA/nemoclaw-community/tree/main/examples/recipes/nvidia/pr-test-case-assistant)
@@ -51,7 +51,7 @@ Each stage narrows the candidates and writes a ledger entry with its reason.
 - Only repos whose policy allows AI-assisted contributions.
 - Daily PR cap.
 - Every PR states that it was written with an AI agent and links its ledger entry.
-- Sandbox network allowlist: GitHub, Firecrawl, NVIDIA Build, PyPI.
+- Sandbox network allowlist: GitHub, Firecrawl, NVIDIA Build, PyPI, Hugging Face (ledger only).
 - Deterministic steps (search, policy fetch, test runs) are scripts the agent
   calls, not model improvisation.
 
