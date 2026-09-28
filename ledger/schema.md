@@ -18,6 +18,10 @@ line; the dataset's commit history shows if that rule was ever broken. The run
 file is uploaded every few minutes during a run (one commit per upload) so the
 UI can show a run in progress. Diffs and test logs are paths in the dataset.
 
+The dataset is public, so the writer strips anything that looks like a token or
+key (env values, `Authorization` headers, `ghp_`/`nvapi-`/`hf_` strings) from
+every line and artifact before upload.
+
 ## Entry
 
 One JSON object per line. Fields not relevant to an entry are left out.
