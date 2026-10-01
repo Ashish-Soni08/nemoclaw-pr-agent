@@ -18,7 +18,7 @@ Export them in your SSH shell only when a step asks. Don't write them into files
 
 ## 1. Launch the VM
 
-Lambda Cloud console: launch the cheapest instance (1x V100, $0.79/h) with Ubuntu 24.04 (Lambda Stack). No GPU is used; the agent only needs CPU, 16 GB RAM and 40 GB disk. Add your SSH key, then:
+Lambda Cloud console: launch the cheapest instance available (1x A10, $1.29/h, when V100s were sold out; set `spend.lambda_hourly_usd` in `config/agent.yaml` to what you pick) with Ubuntu 24.04 (Lambda Stack). No GPU is used; the agent only needs CPU, 16 GB RAM and 40 GB disk. Add your SSH key, then:
 
 ```bash
 ssh ubuntu@<ip>

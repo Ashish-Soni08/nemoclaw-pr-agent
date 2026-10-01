@@ -90,7 +90,7 @@ def snapshot(state_dir: Path, ledger_dir: Path, cfg: dict[str, Any], hf_month_us
     rows = [
         huggingface(hf_month_usd, cfg.get("usage", {}).get("monthly_budget_usd", 20)),
         firecrawl(CreditBook(state_dir / "firecrawl_credits.tsv"), s.get("firecrawl_plan_credits", 1000), firecrawl_key),
-        lambda_hours(state_dir, s.get("lambda_hourly_usd", 0.79), s.get("lambda_credit_usd", 75)),
+        lambda_hours(state_dir, s.get("lambda_hourly_usd", 1.29), s.get("lambda_credit_usd", 75)),
     ]
     append(ledger_dir / "spend.tsv", rows)
     return rows

@@ -64,5 +64,5 @@ models:
 # Spend snapshots (ledger/spend.tsv) for the UI: one row per provider per run.
 spend:
   firecrawl_plan_credits: 1000  # free plan; the run cap above stays at 900
-  lambda_hourly_usd: 0.79       # V100 on-demand
+  lambda_hourly_usd: 1.29       # 1x A10 on-demand (no V100 available on 2026-10-01)
   lambda_credit_usd: 75

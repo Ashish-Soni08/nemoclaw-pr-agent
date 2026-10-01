@@ -11,7 +11,7 @@ A long-running agent that finds issues in AI, data-science and data-analysis rep
 | Decision | Choice |
 | --- | --- |
 | Runtime | NemoClaw with the Hermes agent: OpenShell sandbox, Hermes skills, cron, sub-agents, Telegram |
-| Host | Lambda Cloud V100 instance, paused when not demoing (no GPU work) |
+| Host | Lambda Cloud 1x A10 instance (cheapest available), paused when not demoing (no GPU work) |
 | Models | Hugging Face Inference Providers router, through NemoClaw's managed `inference.local` route. A menu of five models in `config/agent.yaml`: Nemotron 3 Super is the main model, a coder model runs fix sub-agents, Nano does chores |
 | Autonomy | Fully autonomous. No human approves a PR. The self-review gate decides; code enforces the hard limits |
 | Issues | No type restriction. Any issue in a Python AI/data-science repo the agent can genuinely help with; triage decides |
