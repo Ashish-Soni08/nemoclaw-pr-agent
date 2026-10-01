@@ -10,8 +10,8 @@ topics_per_run: 3
 shapes_per_run: 2
 max_verify_per_run: 40
 max_candidates_per_run: 8
-max_credits_per_run: 30
-max_credits_per_month: 900
+max_credits_per_run: 100
+max_credits_per_month: 25000   # of 30,000; the rest is margin
 precedent_reserve_credits: 10   # held back from search so survivors get a precedent query
 recheck_after_days: 14
 

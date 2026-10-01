@@ -28,7 +28,7 @@ node --version   # NemoClaw needs Node 22.19+; the installer sets it up if missi
 git clone https://github.com/Ashish-Soni08/nemoclaw-pr-agent.git && cd nemoclaw-pr-agent
 ```
 
-Pause the instance from the console when you're not demoing; `ledger/spend.tsv` tracks the hours against the $75.
+Pause the instance from the console when you're not demoing; `ledger/spend.tsv` tracks the hours against the $300 credit (about 230 hours at $1.29/h).
 
 ## 2. Install NemoClaw with Hermes and the Hugging Face router
 
