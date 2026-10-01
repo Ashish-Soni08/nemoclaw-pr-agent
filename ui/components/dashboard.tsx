@@ -4,7 +4,9 @@ import { useMemo, useState } from "react";
 import { CreditsPanel } from "@/components/credits-panel";
 import { EntryDetail } from "@/components/entry-detail";
 import { HealthStrip } from "@/components/health-strip";
+import { SpendHistory } from "@/components/spend-history";
 import { Label, OutcomePill, Pill, verdictTone } from "@/components/status";
+import { ThemeToggle } from "@/components/theme-toggle";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { Outcome, Stage, View } from "@/lib/derive";
@@ -21,7 +23,8 @@ const OUTCOMES: { value: Outcome | "all"; label: string }[] = [
 ];
 
 export function Dashboard({ view }: { view: View }) {
-  const [day, setDay] = useState(view.days[0] ?? "");
+  // The funnel and timeline show the latest day; the over-time view covers the rest.
+  const day = view.days[0] ?? "";
   const [stage, setStage] = useState<string | null>(null);
   const [outcome, setOutcome] = useState<Outcome | "all">("all");
   const stages = view.stagesByDay[day] ?? [];
@@ -43,8 +46,9 @@ export function Dashboard({ view }: { view: View }) {
   return (
     <main className="mx-auto grid max-w-[1240px] gap-[18px] px-4 pt-5 pb-12 sm:px-5">
       <Tabs defaultValue="activity" className="grid gap-[18px]">
-        <header className="flex flex-wrap items-center justify-between gap-x-5 gap-y-3">
-          <div className="flex flex-wrap items-baseline gap-3">
+        <header className="grid grid-cols-[1fr_auto] items-center gap-3 sm:grid-cols-[1fr_auto_1fr]">
+          <span className="hidden sm:block" />
+          <div className="grid justify-items-start gap-1.5 sm:justify-items-center sm:text-center">
             <h1 className="text-xl font-bold tracking-tight">NemoClaw PR Agent · Ledger</h1>
             {view.origin.kind === "sample" ? (
               <Pill tone="warn" title="Set LEDGER_DATASET and HF_TOKEN to read the agent's real ledger">Sample data</Pill>
@@ -54,26 +58,26 @@ export function Dashboard({ view }: { view: View }) {
               </span>
             )}
           </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <TabsList>
-              <TabsTrigger value="activity">Activity</TabsTrigger>
-              <TabsTrigger value="repos">Repos</TabsTrigger>
-            </TabsList>
-            <NativeSelect id="day" label="Day" value={day} onChange={(v) => { setDay(v); setStage(null); setPicked(null); }}>
-              {view.days.map((d) => (
-                <option key={d} value={d}>{dayLabel(d)}</option>
-              ))}
-            </NativeSelect>
+          <div className="justify-self-end">
+            <ThemeToggle />
           </div>
         </header>
 
         <HealthStrip health={view.health} now={view.now} />
         <CreditsPanel credits={view.credits} />
+        <SpendHistory days={view.history} />
+
+        <div className="flex justify-center border-b pb-2.5">
+          <TabsList>
+            <TabsTrigger value="activity">Activity</TabsTrigger>
+            <TabsTrigger value="repos">Repos</TabsTrigger>
+          </TabsList>
+        </div>
 
         <TabsContent value="activity" className="grid gap-[18px]">
           <Funnel stages={stages} active={stage} onPick={(k) => { setStage(stage === k ? null : k); setPicked(null); }} prs={prsToday} />
-          <div className="grid items-start gap-[18px] lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]">
-            <section aria-label="Timeline" className="min-w-0 rounded-lg border bg-card">
+          <div className="grid gap-[18px] lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]">
+            <section aria-label="Timeline" className="flex min-w-0 flex-col rounded-lg border bg-card">
               <div className="flex flex-wrap items-center justify-between gap-2 border-b px-3.5 py-3">
                 <Label>{activeStage ? `${activeStage.label} · ${rows.length} entries` : `Every decision, newest first · ${rows.length}`}</Label>
                 <NativeSelect id="outcome" label="Outcome filter" value={outcome} onChange={(v) => { setOutcome(v as Outcome | "all"); setPicked(null); }}>
@@ -82,7 +86,8 @@ export function Dashboard({ view }: { view: View }) {
                   ))}
                 </NativeSelect>
               </div>
-              <ol className="max-h-[360px] overflow-y-auto lg:max-h-[680px]">
+              <div className="relative lg:min-h-80 lg:flex-1">
+              <ol className="max-h-[360px] overflow-y-auto lg:absolute lg:inset-0 lg:max-h-none">
                 {rows.length === 0 ? (
                   <li className="px-3.5 py-6 text-sm text-muted-foreground">No entries match this filter.</li>
                 ) : (
@@ -109,8 +114,9 @@ export function Dashboard({ view }: { view: View }) {
                   ))
                 )}
               </ol>
+              </div>
             </section>
-            <section aria-label="Entry detail" className="min-w-0 rounded-lg border bg-card">
+            <section aria-label="Entry detail" className="min-w-0 self-start rounded-lg border bg-card">
               {selected ? <EntryDetail entry={selected} all={view.entries} /> : <p className="p-4 text-sm text-muted-foreground">Pick an entry to see why the agent did it.</p>}
             </section>
           </div>
@@ -163,7 +169,7 @@ function Funnel({ stages, active, onPick, prs }: { stages: Stage[]; active: stri
   return (
     <section aria-label="Daily funnel" className="grid gap-3 rounded-lg border bg-card p-4">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <Label>Funnel for the day · click a stage to filter the timeline</Label>
+        <Label>Today&apos;s funnel · click a stage to filter the timeline</Label>
         <span className="text-xs text-muted-foreground">PRs opened <b className="font-mono text-foreground">{prs}</b></span>
       </div>
       <div className="grid grid-cols-2 gap-y-3.5 sm:grid-cols-3 lg:grid-cols-6">

@@ -32,6 +32,8 @@ export type Health = {
   errors24h: Entry[];
 };
 
+export type DayTotals = { day: string; huggingface: number; lambda: number; firecrawl: number; prs: number };
+
 export type RepoRow = { repo: string; verdict: string; text: string; files: string; checked: string; prs: number };
 
 export type View = {
@@ -42,6 +44,7 @@ export type View = {
   entries: Entry[];
   stagesByDay: Record<string, Stage[]>;
   credits: Credit[];
+  history: DayTotals[];
   health: Health;
   repos: RepoRow[];
 };
@@ -101,24 +104,39 @@ function latestPer<T extends { ts: string }>(xs: T[], key: (x: T) => string): T[
 const NAMES: Record<string, string> = { huggingface: "Hugging Face", lambda: "Lambda", firecrawl: "Firecrawl" };
 const ORDER = ["huggingface", "lambda", "firecrawl"];
 
+const isDollars = (provider: string) => provider !== "firecrawl";
+
+function daysBetween(from: string, to: string): string[] {
+  const out: string[] = [];
+  for (let t = Date.parse(`${from}T00:00:00Z`); t <= Date.parse(`${to}T00:00:00Z`); t += 86400_000) out.push(day(new Date(t).toISOString()));
+  return out;
+}
+
+// spend.tsv rows are running totals (month to date, or all time for Lambda),
+// so a day's spend is the change from the previous day's last row.
+function spendPerDay(spend: Spend[], provider: string, days: string[]): { day: string; amount: number }[] {
+  const value = (s: Spend) => (isDollars(provider) ? s.cost_usd : s.used);
+  const endOfDay = new Map<string, number>();
+  for (const r of spend.filter((s) => s.provider === provider).sort((a, b) => a.ts.localeCompare(b.ts))) endOfDay.set(day(r.ts), value(r));
+  const known = [...endOfDay.keys()].sort();
+  return days.map((d) => {
+    const cur = endOfDay.get(d);
+    if (cur === undefined) return { day: d, amount: 0 };
+    const before = known.filter((k) => k < d).at(-1);
+    const prev = before ? endOfDay.get(before)! : 0;
+    // A drop means the running total was reset (new month); the new total is that day's spend.
+    return { day: d, amount: cur >= prev ? cur - prev : cur };
+  });
+}
+
 function credits(spend: Spend[], now: string): Credit[] {
   const last7 = Array.from({ length: 7 }, (_, i) => day(new Date(Date.parse(now) - (6 - i) * 86400_000).toISOString()));
   return ORDER.filter((p) => spend.some((s) => s.provider === p)).map((provider) => {
     const rows = spend.filter((s) => s.provider === provider).sort((a, b) => a.ts.localeCompare(b.ts));
     const latest = rows[rows.length - 1];
-    const dollars = provider !== "firecrawl";
-    // Each row is a running total (month to date for HF and Firecrawl, all time for Lambda).
+    const dollars = isDollars(provider);
     const value = (s: Spend) => (dollars ? s.cost_usd : s.used);
-    const endOfDay = new Map<string, number>();
-    for (const r of rows) endOfDay.set(day(r.ts), value(r));
-    const daily = last7.map((d) => {
-      const prevDays = [...endOfDay.keys()].filter((k) => k < d).sort();
-      const prev = prevDays.length ? endOfDay.get(prevDays[prevDays.length - 1])! : 0;
-      const cur = endOfDay.get(d);
-      if (cur === undefined) return { day: d, amount: 0 };
-      // A month rollover resets the running total; the new total is that day's spend.
-      return { day: d, amount: cur >= prev ? cur - prev : cur };
-    });
+    const daily = spendPerDay(spend, provider, last7);
     const left = latest.remaining;
     const recent = daily.slice(-3).map((d) => d.amount);
     const rate = recent.reduce((a, b) => a + b, 0) / recent.length;
@@ -144,6 +162,20 @@ function formatRunout(now: string, days: number): string {
   if (days > 60) return "not for 2+ months at this rate";
   const d = new Date(Date.parse(now) + days * 86400_000);
   return `~${d.toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "UTC" })} at this rate`;
+}
+
+function history(spend: Spend[], entries: Entry[], now: string): DayTotals[] {
+  const first = [spend[0]?.ts, entries[0]?.ts].filter(Boolean).map((t) => day(t!)).sort()[0];
+  if (!first) return [];
+  const days = daysBetween(first, day(now));
+  const per = Object.fromEntries(ORDER.map((p) => [p, spendPerDay(spend, p, days)]));
+  return days.map((d, i) => ({
+    day: d,
+    huggingface: per.huggingface[i].amount,
+    lambda: per.lambda[i].amount,
+    firecrawl: per.firecrawl[i].amount,
+    prs: entries.filter((e) => e.day === d && e.phase === "pr.opened").length,
+  }));
 }
 
 function health(entries: Entry[], now: string): Health {
@@ -196,6 +228,7 @@ export function derive(ledger: Ledger): View {
     entries,
     stagesByDay,
     credits: credits(ledger.spend, now),
+    history: history(ledger.spend, entries, now),
     health: health(entries, now),
     repos: repos(entries),
   };

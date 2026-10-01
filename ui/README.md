@@ -31,5 +31,6 @@ All numbers are computed in `lib/derive.ts` from those two files:
 
 - **Health**: the newest rows. A `start` row without `run.end` means a run is in progress (or crashed); `guard` with result `skipped` means the budget stopped it.
 - **Credits**: the latest `spend.tsv` row per provider; spend per day is the change in the running total.
-- **Funnel**: counts of `discover.verify`, `policy`, `triage`, `claim.*`/`fix.*` and `pr.opened` rows for the day.
+- **Spend and output over time**: those per-day amounts plus `pr.opened` rows per day, grouped by day, month or year.
+- **Funnel**: for the latest day, counts of `discover.verify`, `policy`, `triage`, `claim.*`/`fix.*` and `pr.opened` rows for the day.
 - **Repos**: the latest `policy` row per repo.
