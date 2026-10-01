@@ -1,0 +1,22 @@
+# Egress for cloning public repositories over HTTPS (read-only git smart HTTP).
+# Apply with: nemohermes <sandbox> policy add --from-file policies/presets/pr-agent-git.yaml --yes
+# Pushes never use git: pr-agent writes through api.github.com (see the provider profile).
+
+preset:
+  name: pr-agent-git
+  description: "Clone public GitHub repositories (git fetch only)"
+
+network_policies:
+  pr_agent_git:
+    name: pr_agent_git
+    endpoints:
+      - host: github.com
+        port: 443
+        protocol: rest
+        enforcement: enforce
+        rules:
+          - allow: { method: GET, path: "/**" }
+          - allow: { method: POST, path: "/**/git-upload-pack" }
+    binaries:
+      - { path: /usr/bin/git }
+      - { path: /usr/lib/git-core/git-remote-https }

@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+# Run the pr-agent CLI from this checkout, with Hermes' Python when present
+# (it has PyYAML, and it is the binary the sandbox egress policies allow).
+set -euo pipefail
+REPO="${PR_AGENT_REPO:-$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)}"
+PY="${PR_AGENT_PYTHON:-/opt/hermes/.venv/bin/python}"
+[[ -x "$PY" ]] || PY="$(command -v python3)"
+export PR_AGENT_REPO="$REPO"
+export PYTHONPATH="$REPO/src${PYTHONPATH:+:$PYTHONPATH}"
+exec "$PY" -m pr_agent.cli "$@"

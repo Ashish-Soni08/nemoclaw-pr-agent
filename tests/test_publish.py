@@ -6,7 +6,7 @@ import pytest
 from pr_agent.ledger import Ledger
 from pr_agent.policy import PolicyVerdict
 from pr_agent.publish import Refused, Registry, open_pr, post_claim, preflight, record_gate
-from pr_agent.workspace import Meta, changed_files, prepare, run_tests
+from pr_agent.workspace import changed_files, prepare, run_tests
 
 BODY = "## Why\nadd() subtracted.\n\n## Scope\n- `pkg.add`\n\n## Blast Radius\nOne function.\n\n## Verification\n`pytest` 1 passed.\n"
 LIMITS = {"max_prs_per_day": 3, "max_open_prs_per_repo": 1, "max_diff_lines": 400, "max_files": 20, "max_claims_per_day": 1}

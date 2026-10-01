@@ -1,6 +1,6 @@
 ---
 name: pr-agent-mode
-description: The PR agent's method and router. Load at the start of every task (cron run, follow-up, fix sub-agent). Says which playbook, principle and tool skill to read next.
+description: "Load first, every task: the PR agent's method and router"
 version: 0.1.0
 license: MIT
 metadata:

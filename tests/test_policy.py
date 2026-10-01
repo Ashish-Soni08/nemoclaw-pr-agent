@@ -1,6 +1,5 @@
 import base64
 
-from fakes import FakeTransport
 from pr_agent.policy import apply_maintainer_stance, check, classify
 
 

@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+# Hermes settings the agent needs. Run inside the sandbox after every NemoClaw rebuild
+# (rebuilds regenerate config.yaml). Model ids come from config/agent.yaml's menu.
+set -euo pipefail
+
+FIX_MODEL="${PR_AGENT_FIX_MODEL:-Qwen/Qwen3.5-397B-A17B}"
+
+# Fix sub-agents run on the `fix` model through the same managed inference route.
+hermes config set delegation.model "$FIX_MODEL"
+hermes config set delegation.max_concurrent_children 2
+hermes config set delegation.child_timeout_seconds 3600
+# A full run (triage, two fixes, gate, PR text) needs more than the managed default of 60 turns.
+hermes config set agent.max_turns 200
+# Let the terminal tool see the agent's own settings and credential placeholders.
+hermes config set terminal.env_passthrough '["PR_AGENT_HOME","PR_AGENT_REPO","PRAGENT_GITHUB_TOKEN","PRAGENT_FIRECRAWL_KEY"]'
+hermes config show | sed -n '/^delegation/,/^[a-z]/p' || true
