@@ -129,6 +129,8 @@ def test_claim_posts_once_and_respects_cap(gh, fake, tmp_path):
         post_claim(gh, "o/r", 7, "issue:o/r#7", "again", ALLOW, reg, led, LIMITS)
     with pytest.raises(Refused, match="daily claim cap"):
         post_claim(gh, "o/r", 8, "issue:o/r#8", "plan", ALLOW, reg, led, LIMITS)
+    fake.add("POST", "/repos/o/r/issues/8/comments", {"id": 2, "html_url": "https://github.com/o/r/issues/8#c2"})
+    post_claim(gh, "o/r", 8, "issue:o/r#8", "plan", ALLOW, reg, led, {**LIMITS, "max_claims_per_day": 0})
 
 
 def test_symlink_to_a_secret_is_never_published(ws, tmp_path):

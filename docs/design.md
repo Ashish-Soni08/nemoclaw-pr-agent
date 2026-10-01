@@ -24,8 +24,8 @@ A long-running agent that finds issues in AI, data-science and data-analysis rep
 
 The model reads issues, chooses what to take, debugs, writes the fix and the PR text, and runs the review gate. Everything that touches the outside world is a `pr-agent` command with hard checks in code:
 
-- `pr-agent pr open` refuses unless the gate passed on the exact diff (hash checked), the repo's policy allows AI contributions, the daily cap (3) and one-open-PR-per-repo rule have room, the title is Conventional Commits, the body has the four sections, the diff is under 400 lines and 20 files, and nothing under `.github/workflows/` changed. It appends the AI disclosure and the ledger link itself.
-- `pr-agent claim post` wraps the plan in a fixed comment that says it's an AI agent and that "no" is respected; one claim per issue, 3 per day.
+- `pr-agent pr open` refuses unless the gate passed on the exact diff (hash checked), the repo's policy allows AI contributions, the repo has no other open PR from the agent (there is no daily cap), the title is Conventional Commits, the body has the four sections, the diff is under 400 lines and 20 files, and nothing under `.github/workflows/` changed. It appends the AI disclosure and the ledger link itself.
+- `pr-agent claim post` wraps the plan in a fixed comment that says it's an AI agent and that "no" is respected; one claim per issue, no daily cap.
 - Pushes go through the GitHub Git Data API (blobs, tree, commit, ref) on the agent's fork, so the only credential is one bearer header on `api.github.com`. OpenShell injects it at egress; the sandbox sees a placeholder.
 - Target repos' code (setup, tests) runs with a scrubbed environment: no tokens, no placeholders.
 - The usage guard prices Hermes' own token records against the menu and skips runs once the $400 credit is spent (no daily cap). Hugging Face spend limits only exist for Team/Enterprise orgs, so this is the limit.

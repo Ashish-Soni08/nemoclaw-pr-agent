@@ -142,7 +142,7 @@ def preflight(meta: Meta, policy: PolicyVerdict, registry: Registry, limits: dic
         raise Refused("diff changed after the gate passed; run the gate again")
     if not policy.permits(allow_unclear):
         raise Refused(f"repo AI policy is {policy.verdict}")
-    if registry.opened_today() >= limits.get("max_prs_per_day", 3):
+    if 0 < limits.get("max_prs_per_day", 0) <= registry.opened_today():
         raise Refused("daily PR cap reached")
     if len(registry.open_in_repo(meta.repo)) >= limits.get("max_open_prs_per_repo", 1):
         raise Refused(f"already have an open PR in {meta.repo}")
@@ -199,7 +199,7 @@ def post_claim(gh: GitHub, repo: str, number: int, issue_id: str, plan: str, pol
         raise Refused(f"repo AI policy is {policy.verdict}")
     if issue_id in registry.claims():
         raise Refused("already claimed")
-    if registry.claims_today() >= limits.get("max_claims_per_day", 3):
+    if 0 < limits.get("max_claims_per_day", 0) <= registry.claims_today():
         raise Refused("daily claim cap reached")
     plan = plan.strip()
     if not plan or len(plan) > 800:
