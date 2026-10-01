@@ -95,13 +95,15 @@ What a good first run looks like in the ledger: a `start` row; six or fewer `dis
 
 ## 6. Ledger to the Hugging Face dataset (for the UI)
 
+Save the token once in a file only your user can read (the `read` prompt keeps it off the screen and out of shell history):
+
 ```bash
-crontab -e
-# add (one line):
-*/30 * * * * cd $HOME/nemoclaw-pr-agent && HF_TOKEN=<token> LEDGER_DATASET=<you/pr-agent-ledger> scripts/sync-ledger.sh >> $HOME/pr-agent-sync.log 2>&1
+read -rsp "HF token: " T && echo && (umask 077; printf 'HF_TOKEN=%s\nLEDGER_DATASET=ashish-soni08/pr-agent-ledger\n' "$T" > ~/.pr-agent-sync.env) && unset T
+scripts/sync-ledger.sh   # first sync: creates the private dataset
+(crontab -l 2>/dev/null; echo "*/30 * * * * cd $HOME/nemoclaw-pr-agent && scripts/sync-ledger.sh >> $HOME/pr-agent-sync.log 2>&1") | crontab -
 ```
 
-The crontab holds the token in plain text on the VM, readable only by your user. If you'd rather not, run `scripts/sync-ledger.sh` by hand before demos. Each sync is one commit to the dataset. Files in the dataset:
+Each sync is one commit to the dataset. Files in the dataset:
 
 - `ledger/decisions.tsv`: every decision (ts, run, phase, subject, decision, why, evidence, result)
 - `ledger/spend.tsv`: per-provider spend snapshots (ts, provider, used, unit, cost_usd, remaining, limit, source) for Hugging Face, Firecrawl and Lambda
