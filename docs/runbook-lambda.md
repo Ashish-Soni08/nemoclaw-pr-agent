@@ -91,7 +91,7 @@ What a good first run looks like in the ledger: a `start` row; six or fewer `dis
 
 **VERIFY (Developer Index).** From `docs/discovery.md` section 8: the first run shows whether hits come back as `issue:owner/repo#N`, whether the `topic` filter matches GitHub topics, and how many hits survive the GitHub checks. If fewer than about 1 in 10 survive, raise `k` or widen the star window in `skills/discover-work/references/query-bank.yaml` and redeploy.
 
-**Throughput switch.** Most repos have no written AI policy. With `continue_on_unclear_policy: false` (the design's default) those are skipped, so early runs may find nothing to do. Setting it to `true` lets the agent work in repos with no stated policy (every PR still discloses it's AI-written, and a maintainer's "no" makes the repo `bans` forever). That's your call.
+**Repos with no written AI policy.** `continue_on_unclear_policy` is `true` (decided 2026-10-01), so the agent also works in repos that say nothing about AI contributions, which is most of them. Every PR and claim still says it was written by an AI agent. When a maintainer says no to AI contributions, the agent runs `pr-agent policy <repo> --block`, which marks the repo `bans` permanently (stored in `state/policy/blocked.json`; no cache expiry undoes it). To check what's blocked: `nemohermes pr-agent exec -- cat /sandbox/.pr-agent/state/policy/blocked.json`. Set the switch to `false` and redeploy to go back to explicit-policy repos only.
 
 ## 6. Ledger to the Hugging Face bucket (for the UI)
 

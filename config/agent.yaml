@@ -12,9 +12,11 @@ limits:
 open_as_draft: false            # poteto: open PRs ready for review
 claim_expire_days: 7
 
-# docs/design.md: only `allows` and `allows-with-disclosure` continue.
-# Most repos have no written AI policy, so this one switch decides throughput.
-continue_on_unclear_policy: false
+# `allows` and `allows-with-disclosure` always continue; `bans` never does.
+# Most repos have no written AI policy, so this switch decides throughput.
+# Ashish chose true on 2026-10-01: every PR and claim still says it's AI-written,
+# and a maintainer's "no" blocks the repo for good (`pr-agent policy <repo> --block`).
+continue_on_unclear_policy: true
 
 ledger:
   hf_bucket: ""                 # e.g. ashish-soni08/pr-agent-ledger (or set LEDGER_BUCKET)

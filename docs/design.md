@@ -39,7 +39,7 @@ Two overrides of poteto: stay strictly inside the issue taken, and the gate deci
 
 ## Guardrails
 
-- Only repos whose policy allows AI-assisted contributions (`allows`, `allows-with-disclosure`). `unclear` repos are skipped unless `continue_on_unclear_policy` is turned on.
+- Only repos whose policy allows AI-assisted contributions (`allows`, `allows-with-disclosure`). `unclear` repos (no written policy) are allowed too, because `continue_on_unclear_policy` is on; every PR discloses it's AI-written, and a maintainer's "no" blocks that repo permanently.
 - Every PR and claim says it was written by an AI agent and links the ledger.
 - Never merges, never force-pushes someone else's branch, never edits CI workflows, never argues with a maintainer.
 - Sandbox egress: inference route, `api.github.com` and `api.firecrawl.dev` (Hermes' Python only), `github.com` git fetch, PyPI, Telegram.

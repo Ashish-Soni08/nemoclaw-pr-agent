@@ -19,7 +19,7 @@ Verdicts:
 | `allows` | Explicit welcome, or the repo ships instructions for coding agents | yes |
 | `allows-with-disclosure` | AI help is fine if disclosed | yes (every PR discloses anyway) |
 | `bans` | Policy text, or a maintainer in past issues/PRs, rejects AI contributions | never |
-| `unclear` | No written policy, no maintainer stance found | only if `continue_on_unclear_policy` is true in config/agent.yaml |
+| `unclear` | No written policy, no maintainer stance found | yes while `continue_on_unclear_policy` is true in config/agent.yaml (it is) |
 
 For `unclear` repos the script spends one Index query on past discussion ("policy on AI generated or LLM written pull requests"); a maintainer rejecting AI PRs turns it into `bans`.
 

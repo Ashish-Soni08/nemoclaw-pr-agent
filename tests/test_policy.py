@@ -64,3 +64,20 @@ def test_maintainer_discussion_turns_unclear_into_ban(gh, fake, tmp_path):
     assert v.verdict == "bans"
     assert v.maintainer_evidence == "https://github.com/o/r/pull/5"
     assert check(gh, "o/r", tmp_path).verdict == "bans"
+
+
+def test_block_is_permanent(gh, fake, tmp_path):
+    from pr_agent.policy import block
+
+    fake.add("GET", "/repos/o/r/contents/CONTRIBUTING.md", b64("AI-assisted contributions are welcome."))
+    assert check(gh, "o/r", tmp_path).verdict == "allows"
+    block(tmp_path, "o/r", "please don't send AI PRs", "https://github.com/o/r/issues/3#c1")
+    v = check(gh, "o/r", tmp_path, refresh=True)
+    assert v.verdict == "bans" and not v.permits(allow_unclear=True)
+    assert v.maintainer_evidence.endswith("#c1")
+
+
+def test_unclear_only_continues_when_switched_on(gh, fake, tmp_path):
+    fake.add("GET", "/repos/o/r/contents/CONTRIBUTING.md", b64("Thanks for contributing!"))
+    v = check(gh, "o/r", tmp_path)
+    assert not v.permits() and v.permits(allow_unclear=True)

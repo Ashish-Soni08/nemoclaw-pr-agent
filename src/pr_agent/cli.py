@@ -53,6 +53,10 @@ class App:
         return DevIndex.create(key, CreditBook(self.s.state_dir / "firecrawl_credits.tsv"), self.run_id,
                                max_per_run=bank.get("max_credits_per_run", 30), max_per_month=bank.get("max_credits_per_month", 900))
 
+    @property
+    def allow_unclear(self) -> bool:
+        return bool(self.s.agent.get("continue_on_unclear_policy", False))
+
     def policy(self, repo: str, gh: GitHub, index: DevIndex | None = None) -> policy_mod.PolicyVerdict:
         cache = self.s.state_dir / "policy"
         v = policy_mod.check(gh, repo, cache)
@@ -95,7 +99,7 @@ class App:
             if v.claim_required:
                 c["lane_hint"] = "ask-first"
             self.ledger.log("policy", c["repo"], f"AI policy {v.verdict}", "; ".join(v.matches[:2]) or "no AI policy text found", ", ".join(v.files[:4]) or "-", v.verdict)
-            if v.continues or (v.verdict == "unclear" and self.s.agent.get("continue_on_unclear_policy", False)):
+            if v.permits(self.allow_unclear):
                 kept.append(c)
             else:
                 SeenStore(self.s.state_dir / "seen.tsv").mark(c["issue_id"], "policy", v.verdict, 30)
@@ -154,6 +158,9 @@ def build_parser() -> argparse.ArgumentParser:
 
     pol = sub.add_parser("policy", help="AI-contribution policy verdict for a repo")
     pol.add_argument("repo")
+    pol.add_argument("--block", action="store_true", help="a maintainer said no to AI contributions: skip this repo for good")
+    pol.add_argument("--why", default="")
+    pol.add_argument("--evidence", default="")
 
     iss = sub.add_parser("issue", help="issue body and comments, for triage")
     iss.add_argument("issue_id")
@@ -281,9 +288,15 @@ def dispatch(app: App, a: argparse.Namespace) -> int:  # noqa: C901 - flat comma
         out(app.run_start(a.label))
     elif a.cmd == "discover":
         out(app.discover())
+    elif a.cmd == "policy" and a.block:
+        if not a.why or not a.evidence:
+            raise SystemExit("--block needs --why (the maintainer's words) and --evidence (a URL)")
+        policy_mod.block(app.s.state_dir / "policy", a.repo, a.why, a.evidence)
+        app.ledger.log("policy.block", a.repo, "stopped working in this repo for good", a.why, a.evidence, "bans")
+        out({"repo": a.repo, "verdict": "bans", "blocked": True})
     elif a.cmd == "policy":
         v = app.policy(a.repo, app.gh(), app.index())
-        out(v.__dict__ | {"continues": v.continues})
+        out(v.__dict__ | {"continues": v.permits(app.allow_unclear)})
     elif a.cmd == "issue":
         repo, num = parse_issue_id(a.issue_id)
         gh = app.gh()
@@ -393,7 +406,7 @@ def pr_cmd(app: App, a: argparse.Namespace) -> int:
         meta = Meta.load(Path(a.path))
         v = app.policy(meta.repo, gh)
         ledger_url = app.s.agent.get("ledger", {}).get("public_url", "")
-        pr = open_pr(gh, meta, v, app.registry, app.ledger, limits, a.title, _body(a.body_file), ledger_url, draft=a.draft or app.s.agent.get("open_as_draft", False))
+        pr = open_pr(gh, meta, v, app.registry, app.ledger, limits, a.title, _body(a.body_file), ledger_url, draft=a.draft or app.s.agent.get("open_as_draft", False), allow_unclear=app.allow_unclear)
         SeenStore(app.s.state_dir / "seen.tsv").mark(meta.issue_id, "pr", "pr opened", None)
         out({"url": pr["html_url"], "number": pr["number"]})
     elif a.pcmd == "updates":
@@ -435,7 +448,7 @@ def claim_cmd(app: App, a: argparse.Namespace) -> int:
     if a.ccmd == "post":
         repo, num = parse_issue_id(a.issue_id)
         v = app.policy(repo, gh)
-        res = post_claim(gh, repo, num, a.issue_id, _body(a.plan_file), v, app.registry, app.ledger, app.s.agent.get("limits", {}))
+        res = post_claim(gh, repo, num, a.issue_id, _body(a.plan_file), v, app.registry, app.ledger, app.s.agent.get("limits", {}), allow_unclear=app.allow_unclear)
         SeenStore(app.s.state_dir / "seen.tsv").mark(a.issue_id, "claim", "claimed", None)
         out({"url": res["html_url"]})
     elif a.ccmd == "updates":

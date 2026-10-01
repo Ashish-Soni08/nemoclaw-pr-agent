@@ -9,7 +9,7 @@ Adapted from poteto-mode `playbooks/babysit.md` (cursor/plugins pstack, MIT). On
 3. A fix goes in the PR's workspace, smallest change, then the **self-review-gate** again on the new diff, then `pr-agent pr push <owner/repo#N> --message "<what changed>"`. Reply on the thread after the push so the reply can name the change.
 4. Reply with `pr-agent pr reply <owner/repo#N> <comment_id> --body-file <file>` for review threads, `pr-agent pr comment` for the conversation. One reply per comment. Unslop the text. Never argue; a maintainer's "no" ends the topic.
 5. Comments that need nothing get `pr-agent pr ack <owner/repo#N> <ids> --why "<reason>"` so they don't come back next tick.
-6. A maintainer asking to close, or saying AI PRs aren't welcome: reply once with thanks, log it, and record the repo with `pr-agent log policy.update <repo> "maintainer declined AI PRs" --evidence <url>`. A human closes the PR if needed.
+6. A maintainer asking to close, or saying AI PRs aren't welcome: reply once with thanks, log it, and block the repo for good with `pr-agent policy <owner/repo> --block --why "<quote>" --evidence <url>`. A human closes the PR if needed.
 7. Bot reviewers (linters, CodeRabbit, Bugbot): triage skeptically per `references/bugbot-triage.md`. Never churn code to quiet a bot.
 
 **Report:** per PR, what you fixed, answered, dismissed (with reasons) and what waits on the maintainer.

@@ -70,6 +70,10 @@ class PolicyVerdict:
     def continues(self) -> bool:
         return self.verdict in ("allows", "allows-with-disclosure")
 
+    def permits(self, allow_unclear: bool = False) -> bool:
+        """`continue_on_unclear_policy` lets the agent work where no policy is written down."""
+        return self.continues or (allow_unclear and self.verdict == "unclear")
+
 
 def _sentences(text: str, pattern: re.Pattern[str]) -> list[str]:
     out = []
@@ -101,7 +105,22 @@ def _claim(text: str) -> bool:
     return any(p.search(text) for p in CLAIM)
 
 
+def blocked(cache_dir: Path) -> dict[str, dict[str, str]]:
+    return read_json(cache_dir / "blocked.json", {})
+
+
+def block(cache_dir: Path, repo: str, why: str, evidence: str) -> None:
+    """A maintainer said no to AI contributions. Permanent: no cache expiry or re-check undoes it."""
+    repos = blocked(cache_dir)
+    if repo not in repos:
+        repos[repo] = {"why": why, "evidence": evidence, "at": datetime.now(timezone.utc).isoformat(timespec="seconds")}
+        write_json(cache_dir / "blocked.json", repos)
+
+
 def check(gh: GitHub, repo: str, cache_dir: Path, ttl_days: int = 30, refresh: bool = False) -> PolicyVerdict:
+    stop = blocked(cache_dir).get(repo)
+    if stop:
+        return PolicyVerdict(repo, "bans", False, [], [f"maintainer said no: {stop['why']}"], stop["at"], stop["evidence"])
     cache = cache_dir / f"{repo.replace('/', '__')}.json"
     cached = read_json(cache, None)
     if cached and not refresh:
@@ -135,5 +154,6 @@ def apply_maintainer_stance(verdict: PolicyVerdict, hits: list[dict[str, Any]], 
                 verdict.maintainer_evidence = hit.get("url", "")
                 verdict.matches.append(f"maintainer discussion: {found[0]}")
                 write_json(cache_dir / f"{verdict.repo.replace('/', '__')}.json", asdict(verdict))
+                block(cache_dir, verdict.repo, found[0], verdict.maintainer_evidence)
                 return verdict
     return verdict

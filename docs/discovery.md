@@ -192,7 +192,7 @@ query to look for the maintainers' stance in past discussion:
 ```
 
 A maintainer comment rejecting AI PRs turns `unclear` into `bans`; anything
-else stays `unclear` (and unclear repos don't continue, per docs/design.md).
+else stays `unclear` (unclear repos continue while `continue_on_unclear_policy` is on; see docs/design.md).
 Verdicts are cached per repo, so this runs once per repo.
 
 ## 6. What gets logged (decisions.tsv via show-me-your-work)

@@ -131,7 +131,7 @@ def check_changes(meta: Meta, limits: dict[str, Any]) -> dict[str, bytes | None]
     return changes
 
 
-def preflight(meta: Meta, policy: PolicyVerdict, registry: Registry, limits: dict[str, Any], title: str, body: str) -> tuple[dict[str, Any], dict[str, bytes | None]]:
+def preflight(meta: Meta, policy: PolicyVerdict, registry: Registry, limits: dict[str, Any], title: str, body: str, allow_unclear: bool = False) -> tuple[dict[str, Any], dict[str, bytes | None]]:
     ws = Path(meta.path)
     gate = read_json(ws / ".pr-agent" / "gate.json", None)
     if not gate:
@@ -140,7 +140,7 @@ def preflight(meta: Meta, policy: PolicyVerdict, registry: Registry, limits: dic
         raise Refused(f"self-review gate failed: {gate['findings'][:200]}")
     if gate["diff_hash"] != diff_hash(ws, meta.base_sha):
         raise Refused("diff changed after the gate passed; run the gate again")
-    if not policy.continues:
+    if not policy.permits(allow_unclear):
         raise Refused(f"repo AI policy is {policy.verdict}")
     if registry.opened_today() >= limits.get("max_prs_per_day", 3):
         raise Refused("daily PR cap reached")
@@ -153,9 +153,9 @@ def preflight(meta: Meta, policy: PolicyVerdict, registry: Registry, limits: dic
     return gate, changes
 
 
-def open_pr(gh: GitHub, meta: Meta, policy: PolicyVerdict, registry: Registry, ledger: Ledger, limits: dict[str, Any], title: str, body: str, ledger_url: str, draft: bool = False) -> dict[str, Any]:
+def open_pr(gh: GitHub, meta: Meta, policy: PolicyVerdict, registry: Registry, ledger: Ledger, limits: dict[str, Any], title: str, body: str, ledger_url: str, draft: bool = False, allow_unclear: bool = False) -> dict[str, Any]:
     try:
-        gate, changes = preflight(meta, policy, registry, limits, title, body)
+        gate, changes = preflight(meta, policy, registry, limits, title, body, allow_unclear)
     except Refused as why:
         ledger.log("pr.refused", meta.issue_id, "did not open PR", str(why), meta.path, "refused")
         raise
@@ -194,8 +194,8 @@ CLAIM_TEMPLATE = (
 )
 
 
-def post_claim(gh: GitHub, repo: str, number: int, issue_id: str, plan: str, policy: PolicyVerdict, registry: Registry, ledger: Ledger, limits: dict[str, Any]) -> dict[str, Any]:
-    if not policy.continues:
+def post_claim(gh: GitHub, repo: str, number: int, issue_id: str, plan: str, policy: PolicyVerdict, registry: Registry, ledger: Ledger, limits: dict[str, Any], allow_unclear: bool = False) -> dict[str, Any]:
+    if not policy.permits(allow_unclear):
         raise Refused(f"repo AI policy is {policy.verdict}")
     if issue_id in registry.claims():
         raise Refused("already claimed")

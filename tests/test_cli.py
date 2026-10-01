@@ -43,3 +43,11 @@ def test_decide_normalizes_issue_ids(home, capsys):
     assert cli.main(["decide", "o/r#5", "skip", "--why", "needs design"]) == 0
     seen = (home / "state" / "seen.tsv").read_text()
     assert "issue:o/r#5" in seen
+
+
+def test_policy_block_is_logged_and_stored(home, capsys):
+    assert cli.main(["policy", "o/r", "--block", "--why", "no AI PRs please", "--evidence", "https://github.com/o/r/pull/9#c2"]) == 0
+    assert json.loads(capsys.readouterr().out)["blocked"] is True
+    assert "o/r" in json.loads((home / "state" / "policy" / "blocked.json").read_text())
+    rows = (home / "ledger" / "decisions.tsv").read_text().splitlines()
+    assert rows[-1].split("\t")[2:5] == ["policy.block", "o/r", "stopped working in this repo for good"]

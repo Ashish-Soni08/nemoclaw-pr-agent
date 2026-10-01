@@ -150,3 +150,12 @@ def test_follow_up_push_checks_workflows(ws, tmp_path):
     (wf / "ci.yml").write_text("on: push\n")
     with pytest.raises(Refused, match="CI workflows"):
         check_changes(ws, LIMITS)
+
+
+def test_unclear_policy_needs_the_switch(ws, tmp_path):
+    unclear = PolicyVerdict("o/r", "unclear", False, [])
+    fix(ws)
+    record_gate(ws, "pass", "no findings", ["thermo", "security"])
+    with pytest.raises(Refused, match="policy is unclear"):
+        preflight(ws, unclear, Registry(tmp_path), LIMITS, "fix(pkg): add numbers", BODY)
+    preflight(ws, unclear, Registry(tmp_path), LIMITS, "fix(pkg): add numbers", BODY, allow_unclear=True)
