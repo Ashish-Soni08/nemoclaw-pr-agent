@@ -141,16 +141,32 @@ def run_tests(ws: Path, cmd: str, timeout: int = 1800) -> dict[str, Any]:
     return {"cmd": cmd, "exit": code, "passed": code == 0, "tail": tail, "log": str(log), "seconds": round(time.monotonic() - started, 1)}
 
 
+class UnsafeChange(RuntimeError):
+    """The working tree holds something the agent must never publish."""
+
+
 def changed_files(ws: Path, base_sha: str) -> dict[str, bytes | None]:
-    """Working tree vs base: path -> new bytes, or None for a deletion. Untracked files count."""
+    """Staged tree vs base: path -> new bytes, or None for a deletion. Untracked files count.
+
+    Content comes from git's own blobs, never by opening the path, so a symlink planted by
+    repo code (say, to a secrets file) can't smuggle another file's bytes into a PR. Symlinks
+    and submodules are refused outright.
+    """
     run(["git", "add", "-A", "--", ".", ":!.pr-agent", ":!.venv-pr-agent"], cwd=ws)
-    proc = run(["git", "diff", "--cached", "--name-status", "--no-renames", base_sha], cwd=ws)
+    proc = run(["git", "diff", "--cached", "--raw", "--no-renames", "--no-abbrev", base_sha], cwd=ws)
     changes: dict[str, bytes | None] = {}
     for line in proc.stdout.splitlines():
-        status, _, path = line.partition("\t")
+        info, _, path = line.partition("\t")
         if not path:
             continue
-        changes[path] = None if status.startswith("D") else (ws / path).read_bytes()
+        _old_mode, new_mode, _old_sha, new_sha, status = info.lstrip(":").split()
+        if status.startswith("D"):
+            changes[path] = None
+            continue
+        if new_mode in ("120000", "160000"):
+            raise UnsafeChange(f"{path} is a {'symlink' if new_mode == '120000' else 'submodule'}; the agent never publishes those")
+        blob = subprocess.run(["git", "cat-file", "blob", new_sha], cwd=ws, env=scrubbed_env(), capture_output=True, check=True, timeout=60)
+        changes[path] = blob.stdout
     return changes
 
 

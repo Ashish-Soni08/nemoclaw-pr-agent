@@ -18,7 +18,7 @@ from .github import GitHub
 from .ledger import Ledger
 from .policy import PolicyVerdict
 from .state import read_json, write_json
-from .workspace import Meta, changed_files, diff_hash, diff_text
+from .workspace import Meta, UnsafeChange, changed_files, diff_hash, diff_text
 
 REQUIRED_SECTIONS = ("## Why", "## Scope", "## Blast Radius", "## Verification")
 TITLE = re.compile(r"^(feat|fix|docs|refactor|test|chore|perf)(\([\w./-]+\))?: \S.{0,70}$")
@@ -111,6 +111,26 @@ def footer(issue_url: str, ledger_url: str, gate: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
+def check_changes(meta: Meta, limits: dict[str, Any]) -> dict[str, bytes | None]:
+    """What may leave the sandbox, for a new PR and for every follow-up push alike."""
+    ws = Path(meta.path)
+    try:
+        changes = changed_files(ws, meta.base_sha)
+    except UnsafeChange as why:
+        raise Refused(str(why)) from None
+    if not changes:
+        raise Refused("no changes to publish")
+    n_lines = sum(1 for l in diff_text(ws, meta.base_sha).splitlines() if l[:1] in "+-" and l[:3] not in ("+++", "---"))
+    if n_lines > limits.get("max_diff_lines", 400):
+        raise Refused(f"diff is {n_lines} lines, over the {limits.get('max_diff_lines', 400)} line cap")
+    if len(changes) > limits.get("max_files", 20):
+        raise Refused(f"diff touches {len(changes)} files, over the cap")
+    for path in changes:
+        if path.startswith(".github/workflows/"):
+            raise Refused("agent never edits CI workflows")
+    return changes
+
+
 def preflight(meta: Meta, policy: PolicyVerdict, registry: Registry, limits: dict[str, Any], title: str, body: str) -> tuple[dict[str, Any], dict[str, bytes | None]]:
     ws = Path(meta.path)
     gate = read_json(ws / ".pr-agent" / "gate.json", None)
@@ -129,17 +149,7 @@ def preflight(meta: Meta, policy: PolicyVerdict, registry: Registry, limits: dic
     if not TITLE.match(title):
         raise Refused("title must be Conventional Commits: type(scope): subject, under ~70 chars")
     check_body(body)
-    changes = changed_files(ws, meta.base_sha)
-    if not changes:
-        raise Refused("no changes to publish")
-    n_lines = sum(1 for l in diff_text(ws, meta.base_sha).splitlines() if l[:1] in "+-" and l[:3] not in ("+++", "---"))
-    if n_lines > limits.get("max_diff_lines", 400):
-        raise Refused(f"diff is {n_lines} lines, over the {limits.get('max_diff_lines', 400)} line cap")
-    if len(changes) > limits.get("max_files", 20):
-        raise Refused(f"diff touches {len(changes)} files, over the cap")
-    for path in changes:
-        if path.startswith(".github/workflows/"):
-            raise Refused("agent never edits CI workflows")
+    changes = check_changes(meta, limits)
     return gate, changes
 
 

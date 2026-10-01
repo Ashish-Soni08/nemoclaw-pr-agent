@@ -58,6 +58,8 @@ The keys become OpenShell providers, injected at egress for `api.github.com` and
 
 **VERIFY (credential injection).** This follows the pattern NemoClaw uses for Tavily and the chief-of-staff recipe uses for Slack, but no recipe does it for a custom GitHub profile. After step 4, the smoke test `pr-agent policy huggingface/transformers` must print a verdict. A 401 means the placeholder isn't being swapped: check `openshell sandbox provider list pr-agent`, and that `env | grep PRAGENT_` inside the sandbox shows placeholders. If injection can't be made to work in time, use the fallback in section 7.
 
+**VERIFY (who gets the token).** The GitHub profile injects the token only for `/opt/hermes/.venv/bin/python`. Repo test suites run under a venv built from a Python interpreter too, so check OpenShell doesn't match them as the same binary: inside the sandbox, run `.venv-pr-agent/bin/python -c "import urllib.request; print(urllib.request.urlopen('https://api.github.com/user').status)"` from any prepared workspace under `/sandbox/.pr-agent/workspaces/`. It should fail (403 from the policy or 401 from GitHub). A 200 means other people's test code can act as the agent's GitHub account; give the token only the permissions it needs (Contents, Pull requests and Issues write; no Workflows, no Administration) and tell the build thread.
+
 ## 4. Deploy the agent
 
 ```bash

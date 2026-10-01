@@ -129,3 +129,24 @@ def test_claim_posts_once_and_respects_cap(gh, fake, tmp_path):
         post_claim(gh, "o/r", 7, "issue:o/r#7", "again", ALLOW, reg, led, LIMITS)
     with pytest.raises(Refused, match="daily claim cap"):
         post_claim(gh, "o/r", 8, "issue:o/r#8", "plan", ALLOW, reg, led, LIMITS)
+
+
+def test_symlink_to_a_secret_is_never_published(ws, tmp_path):
+    secret = tmp_path / "secrets.env"
+    secret.write_text("GITHUB_TOKEN=real-token\n")
+    fix(ws)
+    Path(ws.path, "notes.txt").symlink_to(secret)
+    record_gate(ws, "pass", "no findings", ["thermo", "security"])
+    with pytest.raises(Refused, match="symlink"):
+        preflight(ws, ALLOW, Registry(tmp_path), LIMITS, "fix(pkg): add numbers", BODY)
+
+
+def test_follow_up_push_checks_workflows(ws, tmp_path):
+    from pr_agent.publish import check_changes
+
+    fix(ws)
+    wf = Path(ws.path, ".github", "workflows")
+    wf.mkdir(parents=True)
+    (wf / "ci.yml").write_text("on: push\n")
+    with pytest.raises(Refused, match="CI workflows"):
+        check_changes(ws, LIMITS)

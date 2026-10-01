@@ -17,12 +17,12 @@ from .devindex import DevIndex
 from .discover import DiscoveryRun
 from .github import GitHub
 from .ledger import Ledger, sync_to_bucket
-from .publish import Refused, Registry, ack_comments, claim_updates, open_pr, post_claim, pr_updates, record_gate
+from .publish import Refused, Registry, ack_comments, check_changes, claim_updates, open_pr, post_claim, pr_updates, record_gate
 from .state import CreditBook, SeenStore, read_json, write_json
 from .spend import snapshot as spend_snapshot
 from .summary import compact_candidates, daily_digest, run_summary
 from .usage import menu, report, served_models
-from .workspace import Meta, changed_files, diff_hash, diff_text, prepare, run_tests, setup_env
+from .workspace import Meta, diff_hash, diff_text, prepare, run_tests, setup_env
 
 
 def out(data: Any) -> None:
@@ -423,7 +423,7 @@ def pr_cmd(app: App, a: argparse.Namespace) -> int:
         if gate.get("verdict") != "pass" or gate.get("diff_hash") != diff_hash(Path(meta.path), meta.base_sha):
             raise Refused("run the self-review gate on the updated diff before pushing")
         fork = gh.ensure_fork(meta.repo)
-        sha = gh.push_files(fork, meta.branch, meta.base_sha, changed_files(Path(meta.path), meta.base_sha), a.message)
+        sha = gh.push_files(fork, meta.branch, meta.base_sha, check_changes(meta, app.s.agent.get("limits", {})), a.message)
         app.registry.save_pr(a.key, {"commit": sha})
         app.ledger.log("follow-up.push", a.key, "pushed review fixes", a.message, sha, "pushed")
         out({"commit": sha})
