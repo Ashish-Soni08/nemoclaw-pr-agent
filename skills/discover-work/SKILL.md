@@ -16,7 +16,7 @@ The cron pre-step runs `pr-agent prestep-run`, which already did all of this and
 
 What the script does, so you can read its output:
 
-1. Takes the next 3 topics and 2 issue shapes from `references/query-bank.yaml` and runs them against the Developer Index (Python repos, 200 to 30,000 stars, not archived, not forks). Hard credit caps: 100 per run, 25,000 per month, checked before each call.
+1. Takes the next 3 topics and 2 issue shapes from `references/query-bank.yaml` and runs them against the Developer Index (Python repos, 200 to 30,000 stars, not archived, not forks). Credit backstops: 1,000 per run, 70,000 in total, checked before each call.
 2. Skips issues it has seen recently (`state/seen.tsv`).
 3. Checks each hit live on GitHub, cheapest check first: repo alive and licensed, issue open, unlocked, unassigned, updated in 180 days, no open PR referencing it, no "I'm working on this" comment in 14 days. Older claims (14 to 30 days) are passed on as `ambiguous_claims` for you to judge.
 4. For each survivor, one more Index query for merged PRs in that repo: a merged PR that names the issue means it's already fixed (dropped); the closest merged PRs come back as `precedent_prs`, examples of how this repo writes fixes and tests.

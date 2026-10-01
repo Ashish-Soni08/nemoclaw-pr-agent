@@ -28,8 +28,8 @@ The model reads issues, chooses what to take, debugs, writes the fix and the PR 
 - `pr-agent claim post` wraps the plan in a fixed comment that says it's an AI agent and that "no" is respected; one claim per issue, 3 per day.
 - Pushes go through the GitHub Git Data API (blobs, tree, commit, ref) on the agent's fork, so the only credential is one bearer header on `api.github.com`. OpenShell injects it at egress; the sandbox sees a placeholder.
 - Target repos' code (setup, tests) runs with a scrubbed environment: no tokens, no placeholders.
-- The usage guard prices Hermes' own token records against the menu and skips runs when the daily or monthly budget is spent. Hugging Face spend limits only exist for Team/Enterprise orgs, so this is the limit.
-- Firecrawl credits are capped per run (100) and per month (25,000 of the 30,000 credits), checked before each call.
+- The usage guard prices Hermes' own token records against the menu and skips runs once the $400 credit is spent (no daily cap). Hugging Face spend limits only exist for Team/Enterprise orgs, so this is the limit.
+- Firecrawl credits are stopped only when the 70,000-credit total is spent (a backstop of 1,000 per run catches a runaway loop), checked before each call.
 
 ## Skills
 

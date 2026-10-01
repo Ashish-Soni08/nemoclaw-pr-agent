@@ -56,7 +56,7 @@ class UsageReport:
     def over(self) -> str:
         if self.month_usd >= self.month_budget:
             return f"monthly budget used: ${self.month_usd:.2f} of ${self.month_budget:.2f}"
-        if self.day_usd >= self.day_budget:
+        if self.day_budget > 0 and self.day_usd >= self.day_budget:
             return f"daily budget used: ${self.day_usd:.2f} of ${self.day_budget:.2f}"
         return ""
 

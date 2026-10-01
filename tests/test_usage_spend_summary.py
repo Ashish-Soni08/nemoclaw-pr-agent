@@ -37,6 +37,7 @@ def test_guard_prices_sessions_and_flags_budget(tmp_path):
     assert rep.unknown_models == ["mystery/model"]
     assert rep.over == "daily budget used: $2.50 of $2.00"
     assert report(db, MENU, month_budget=5, day_budget=10, now=now).over.startswith("monthly budget used")
+    assert report(db, MENU, month_budget=10, day_budget=0, now=now).over == ""
     assert report(tmp_path / "missing.db", MENU, 10, 2, now=now).month_usd == 0
 
 

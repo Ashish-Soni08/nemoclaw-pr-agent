@@ -26,8 +26,8 @@ ledger:
 # are ESTIMATES: update them from the Hugging Face Inference Providers pricing
 # page before the first run. Unknown models are priced at the most expensive entry.
 usage:
-  monthly_budget_usd: 300       # Ashish's Hugging Face credit (2026-10-01)
-  daily_budget_usd: 15          # spreads the $300 over about 20 days
+  monthly_budget_usd: 400       # Ashish's Hugging Face credit (2026-10-01); runs stop only when it's spent
+  daily_budget_usd: 0           # 0 = no daily cap (Ashish, 2026-10-01: don't hold the agent back)
 
 router_url: https://router.huggingface.co/v1
 
@@ -63,6 +63,6 @@ models:
 
 # Spend snapshots (ledger/spend.tsv) for the UI: one row per provider per run.
 spend:
-  firecrawl_plan_credits: 30000 # Ashish's Firecrawl credit (2026-10-01); hard caps are in the query bank
+  firecrawl_plan_credits: 70000 # Ashish's Firecrawl credit (2026-10-01)
   lambda_hourly_usd: 1.29       # 1x A10 on-demand (no V100 available on 2026-10-01)
-  lambda_credit_usd: 300        # Ashish's Lambda credit (2026-10-01)
+  lambda_credit_usd: 500        # Ashish's Lambda credit (2026-10-01)
