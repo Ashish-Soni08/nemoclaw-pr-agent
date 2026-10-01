@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "ledger-ui",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["ui/node_modules/next/dist/bin/next", "start", "ui", "-p", "3000"],
+      "port": 3000
+    }
+  ]
+}
