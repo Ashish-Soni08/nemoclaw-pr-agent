@@ -24,7 +24,7 @@ Lambda Cloud console: launch the cheapest instance available (1x A10, $1.29/h, w
 ssh ubuntu@<ip>
 sudo usermod -aG docker $USER && newgrp docker   # Lambda Stack ships Docker; this lets you run it without sudo
 docker run --rm hello-world
-node --version   # NemoClaw needs Node 22.19+; the installer sets it up if missing
+node --version   # NemoClaw needs Node 22.19+. If missing: curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash - && sudo apt-get install -y nodejs
 git clone https://github.com/Ashish-Soni08/nemoclaw-pr-agent.git && cd nemoclaw-pr-agent
 ```
 
@@ -40,7 +40,7 @@ scripts/install.sh
 
 This onboards a sandbox called `pr-agent` with Nemotron 3 Super as the main model, served through `router.huggingface.co` as an OpenAI-compatible endpoint. The HF token goes to the OpenShell gateway; the sandbox talks to `inference.local` and never sees it.
 
-**VERIFY (model id).** Before installing, check the router serves the menu: `python3 -m pip install --user pyyaml && HF_TOKEN=$HF_TOKEN bin/pr-agent models`. Every row should say `"served": true`. If the Super id isn't served, pick the served Nemotron id from `curl -s -H "Authorization: Bearer $HF_TOKEN" https://router.huggingface.co/v1/models | python3 -m json.tool | grep -i nemotron`, put it in `config/agent.yaml`, and export `PR_AGENT_MAIN_MODEL=<id>` before `install.sh`.
+**VERIFY (model id).** Before installing, check the router serves the menu: `sudo apt-get install -y python3-yaml && HF_TOKEN=$HF_TOKEN bin/pr-agent models`. Every row should say `"served": true`. If the Super id isn't served, pick the served Nemotron id from `curl -s -H "Authorization: Bearer $HF_TOKEN" https://router.huggingface.co/v1/models | python3 -m json.tool | grep -i nemotron`, put it in `config/agent.yaml`, and export `PR_AGENT_MAIN_MODEL=<id>` before `install.sh`.
 
 **VERIFY (per-task models).** Fix sub-agents use `delegation.model` (Qwen3.5 by default). If NemoClaw's managed route pins every request to the onboarded model, sub-agents silently run on Super too. Check after the first run with `nemohermes pr-agent exec -- sqlite3 /sandbox/.hermes/state.db "select model, count(*) from sessions group by 1"`. Either outcome works; the usage guard prices whatever ran.
 
