@@ -1,0 +1,66 @@
+# PR agent settings. Secrets never go here: see docs/runbook-lambda.md.
+
+# Hard caps, enforced in code (src/pr_agent/publish.py), not in prompts.
+limits:
+  max_fixes_per_run: 2          # issues the main agent hands to fix sub-agents per run
+  max_prs_per_day: 3
+  max_open_prs_per_repo: 1      # never more than one open PR per repository
+  max_claims_per_day: 3         # "ask first" comments
+  max_diff_lines: 400           # added + removed lines
+  max_files: 20
+
+open_as_draft: false            # poteto: open PRs ready for review
+claim_expire_days: 7
+
+# docs/design.md: only `allows` and `allows-with-disclosure` continue.
+# Most repos have no written AI policy, so this one switch decides throughput.
+continue_on_unclear_policy: false
+
+ledger:
+  hf_bucket: ""                 # e.g. ashish-soni08/pr-agent-ledger (or set LEDGER_BUCKET)
+  public_url: ""                # link printed in every PR footer, e.g. the bucket's web URL
+
+# Model spend guard (src/pr_agent/usage.py). Prices are USD per 1M tokens and
+# are ESTIMATES: update them from the Hugging Face Inference Providers pricing
+# page before the first run. Unknown models are priced at the most expensive entry.
+usage:
+  monthly_budget_usd: 20
+  daily_budget_usd: 3
+
+router_url: https://router.huggingface.co/v1
+
+# The approved menu. Hermes uses `main` for cron runs, `fix` for delegated
+# fix sub-agents (delegation.model), `fast` for auxiliary chores. Run
+# `pr-agent models` on the host to confirm each id is served by the router.
+models:
+  - id: nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-FP8
+    roles: [main, review]
+    price_in: 0.50
+    price_out: 1.50
+    note: default main model; triage, gate synthesis, PR text
+  - id: nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B
+    roles: [fast]
+    price_in: 0.10
+    price_out: 0.40
+    note: auxiliary tasks (compression, titles)
+  - id: Qwen/Qwen3.5-397B-A17B
+    roles: [fix]
+    price_in: 0.60
+    price_out: 2.40
+    note: fix sub-agents; strong on code and tool use
+  - id: moonshotai/Kimi-K2.6
+    roles: [review, fallback]
+    price_in: 0.60
+    price_out: 2.50
+    note: second model family for review passes, fallback main
+  - id: deepseek-ai/DeepSeek-V3.2
+    roles: [fallback]
+    price_in: 0.30
+    price_out: 1.20
+    note: cheap fallback
+
+# Spend snapshots (ledger/spend.tsv) for the UI: one row per provider per run.
+spend:
+  firecrawl_plan_credits: 1000  # free plan; the run cap above stays at 900
+  lambda_hourly_usd: 0.79       # V100 on-demand
+  lambda_credit_usd: 75

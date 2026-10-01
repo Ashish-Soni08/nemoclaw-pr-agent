@@ -1,0 +1,66 @@
+"""decisions.tsv: one row per decision, append-only.
+
+Columns follow show-me-your-work (ts, phase, decision, why, evidence, result)
+with `run` and `subject` added so a reader can filter one run or one issue.
+"""
+
+from __future__ import annotations
+
+import csv
+import os
+from dataclasses import dataclass
+from datetime import datetime, timezone
+from pathlib import Path
+
+COLUMNS = ("ts", "run", "phase", "subject", "decision", "why", "evidence", "result")
+
+
+def clean(value: object) -> str:
+    """Single-line cell; a leading formula character gets a quote so spreadsheets never execute it."""
+    text = str(value if value is not None else "")
+    text = text.replace("\t", " ").replace("\r", " ").replace("\n", " ").strip()
+    if text[:1] in ("=", "+", "-", "@"):
+        text = "'" + text
+    return text
+
+
+def now_iso() -> str:
+    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+@dataclass
+class Ledger:
+    path: Path
+    run: str = ""
+
+    def log(self, phase: str, subject: str, decision: str, why: str = "", evidence: str = "", result: str = "") -> dict[str, str]:
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        row = dict(zip(COLUMNS, (now_iso(), self.run, phase, subject, decision, why, evidence, result)))
+        row = {k: clean(v) for k, v in row.items()}
+        new = not self.path.exists() or self.path.stat().st_size == 0
+        with self.path.open("a", encoding="utf-8") as fh:
+            if new:
+                fh.write("\t".join(COLUMNS) + "\n")
+            fh.write("\t".join(row[c] for c in COLUMNS) + "\n")
+            fh.flush()
+            os.fsync(fh.fileno())
+        return row
+
+    def rows(self) -> list[dict[str, str]]:
+        if not self.path.exists():
+            return []
+        with self.path.open(encoding="utf-8") as fh:
+            return list(csv.DictReader(fh, delimiter="\t", quoting=csv.QUOTE_NONE))
+
+    def run_rows(self, run: str) -> list[dict[str, str]]:
+        return [r for r in self.rows() if r.get("run") == run]
+
+
+def sync_to_bucket(local_dir: Path, bucket: str, token: str | None = None) -> str:
+    """Mirror the ledger folder to a Hugging Face bucket (hf://buckets/<ns>/<name>/ledger)."""
+    from huggingface_hub import sync_bucket  # optional dependency
+
+    dest = bucket if bucket.startswith("hf://") else f"hf://buckets/{bucket}"
+    dest = dest.rstrip("/") + "/ledger"
+    sync_bucket(str(local_dir), dest, token=token, quiet=True)
+    return dest
