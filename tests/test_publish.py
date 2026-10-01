@@ -104,7 +104,7 @@ def test_open_pr_pushes_via_api_and_adds_footer(ws, tmp_path, gh, fake):
     fake.add("POST", "/repos/o/r/pulls", {"number": 42, "html_url": "https://github.com/o/r/pull/42"})
     reg, led = Registry(tmp_path), Ledger(tmp_path / "d.tsv", "r1")
 
-    pr = open_pr(gh, ws, ALLOW, reg, led, LIMITS, "fix(pkg): add numbers", BODY, "https://hf.co/buckets/x")
+    pr = open_pr(gh, ws, ALLOW, reg, led, LIMITS, "fix(pkg): add numbers", BODY, "https://hf.co/datasets/x")
 
     assert pr["number"] == 42
     tree = fake.called("POST", "/git/trees")[0]

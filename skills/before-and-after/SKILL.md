@@ -31,11 +31,11 @@ Then:
 python3 ${HERMES_SKILL_DIR}/scripts/capture.py <ws> --script .pr-agent/show.py --kind png|txt|html
 ```
 
-It runs the script on a clean checkout of the base commit and on your working tree with the same interpreter, saves both outputs under the ledger's `media/<issue-slug>/` folder (mirrored to the public ledger bucket by the host), and prints a Markdown snippet. Paste the snippet after the four sections of the PR body.
+It runs the script on a clean checkout of the base commit and on your working tree with the same interpreter, saves both outputs under the ledger's `media/<issue-slug>/` folder (mirrored to the ledger dataset by the host), and prints a Markdown snippet. Paste the snippet after the four sections of the PR body.
 
 ## Rules
 
 - Same input, same command, same interpreter on both sides. Only the code differs.
 - The "before" must show the bug the issue describes. If it doesn't, your repro is wrong; go back to the playbook.
-- Text output goes inline in the PR body (trimmed to what matters). Images are linked from the ledger bucket; if `ledger.public_url` isn't set, describe the difference in words instead and keep the files in the ledger.
+- Text output goes inline in the PR body (trimmed to what matters). Images are linked from the ledger dataset; if `ledger.public_url` isn't set (the dataset is private), describe the difference in words instead and keep the files in the ledger.
 - Don't commit captures to the target repo.

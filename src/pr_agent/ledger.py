@@ -56,11 +56,18 @@ class Ledger:
         return [r for r in self.rows() if r.get("run") == run]
 
 
-def sync_to_bucket(local_dir: Path, bucket: str, token: str | None = None) -> str:
-    """Mirror the ledger folder to a Hugging Face bucket (hf://buckets/<ns>/<name>/ledger)."""
-    from huggingface_hub import sync_bucket  # optional dependency
+def sync_to_dataset(local_dir: Path, repo_id: str, token: str | None = None) -> str:
+    """Mirror the ledger folder into a Hugging Face dataset repo, under `ledger/`.
 
-    dest = bucket if bucket.startswith("hf://") else f"hf://buckets/{bucket}"
-    dest = dest.rstrip("/") + "/ledger"
-    sync_bucket(str(local_dir), dest, token=token, quiet=True)
-    return dest
+    The dataset is created private on first sync. Each sync is one commit, so the
+    dataset's history is also a history of the ledger.
+    """
+    from huggingface_hub import HfApi  # optional dependency
+
+    api = HfApi(token=token)
+    api.create_repo(repo_id, repo_type="dataset", private=True, exist_ok=True)
+    api.upload_folder(
+        repo_id=repo_id, repo_type="dataset", folder_path=str(local_dir), path_in_repo="ledger",
+        commit_message="sync ledger", allow_patterns=["*.tsv", "runs/**", "media/**"],
+    )
+    return f"https://huggingface.co/datasets/{repo_id}/tree/main/ledger"

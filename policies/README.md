@@ -11,4 +11,4 @@ OpenShell egress for the agent's sandbox. Everything else stays blocked.
 | PyPI (installing a target repo's test deps) | built-in `pypi` preset | none |
 | Telegram (run summaries) | `nemohermes <sandbox> channels add telegram` applies its own preset | bot token held by the gateway |
 
-The Hugging Face ledger bucket is written from the host (`scripts/sync-ledger.sh`), so the sandbox never holds a write token for it.
+The Hugging Face ledger dataset is written from the host (`scripts/sync-ledger.sh`), so the sandbox never holds a write token for it.

@@ -16,7 +16,7 @@ from .config import MissingSecret, Settings, secret
 from .devindex import DevIndex
 from .discover import DiscoveryRun
 from .github import GitHub
-from .ledger import Ledger, sync_to_bucket
+from .ledger import Ledger, sync_to_dataset
 from .publish import Refused, Registry, ack_comments, check_changes, claim_updates, open_pr, post_claim, pr_updates, record_gate
 from .state import CreditBook, SeenStore, read_json, write_json
 from .spend import snapshot as spend_snapshot
@@ -247,7 +247,7 @@ def build_parser() -> argparse.ArgumentParser:
     ls = lsub.add_parser("show")
     ls.add_argument("--run", default="")
     ls.add_argument("--tail", type=int, default=40)
-    lsub.add_parser("sync", help="host-side: mirror the ledger to the Hugging Face bucket")
+    lsub.add_parser("sync", help="host-side: mirror the ledger to the Hugging Face dataset")
     return p
 
 
@@ -353,10 +353,10 @@ def dispatch(app: App, a: argparse.Namespace) -> int:  # noqa: C901 - flat comma
             for r in rows[-a.tail:]:
                 print("\t".join(r.values()))
         else:
-            bucket = os.environ.get("LEDGER_BUCKET") or app.s.agent.get("ledger", {}).get("hf_bucket", "")
-            if not bucket:
-                raise SystemExit("set LEDGER_BUCKET (e.g. your-name/pr-agent-ledger)")
-            out({"synced_to": sync_to_bucket(app.s.ledger_dir, bucket, os.environ.get("HF_TOKEN"))})
+            repo = os.environ.get("LEDGER_DATASET") or app.s.agent.get("ledger", {}).get("hf_dataset", "")
+            if not repo:
+                raise SystemExit("set LEDGER_DATASET (e.g. your-name/pr-agent-ledger)")
+            out({"synced_to": sync_to_dataset(app.s.ledger_dir, repo, os.environ.get("HF_TOKEN"))})
     return 0
 
 

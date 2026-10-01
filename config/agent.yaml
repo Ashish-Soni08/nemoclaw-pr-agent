@@ -19,8 +19,8 @@ claim_expire_days: 7
 continue_on_unclear_policy: true
 
 ledger:
-  hf_bucket: ""                 # e.g. ashish-soni08/pr-agent-ledger (or set LEDGER_BUCKET)
-  public_url: ""                # link printed in every PR footer, e.g. the bucket's web URL
+  hf_dataset: ""                # Hugging Face dataset repo, e.g. ashish-soni08/pr-agent-ledger (or set LEDGER_DATASET)
+  public_url: ""                # link printed in every PR footer; only set it if the dataset is public
 
 # Model spend guard (src/pr_agent/usage.py). Prices are USD per 1M tokens and
 # are ESTIMATES: update them from the Hugging Face Inference Providers pricing

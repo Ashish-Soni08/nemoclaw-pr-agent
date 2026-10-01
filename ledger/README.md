@@ -1,6 +1,6 @@
 # ledger
 
-The agent's record lives in `$PR_AGENT_HOME/ledger/` inside the sandbox (`/sandbox/.pr-agent/ledger`) and is mirrored to a Hugging Face bucket by `scripts/sync-ledger.sh`.
+The agent's record lives in `$PR_AGENT_HOME/ledger/` inside the sandbox (`/sandbox/.pr-agent/ledger`) and is mirrored to a Hugging Face dataset (under `ledger/`) by `scripts/sync-ledger.sh`.
 
 | File | Shape |
 | --- | --- |

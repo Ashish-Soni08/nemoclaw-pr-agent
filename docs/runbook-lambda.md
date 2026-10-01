@@ -8,11 +8,11 @@ Items marked **VERIFY** could not be tested from the build session (NemoClaw, Fi
 
 | Key | Where to get it | Used by |
 | --- | --- | --- |
-| `HF_TOKEN` | huggingface.co, Settings, Access Tokens. Fine-grained, with "Make calls to Inference Providers" (and write access to your ledger bucket if you reuse it for sync) | Model inference, ledger sync |
+| `HF_TOKEN` | huggingface.co, Settings, Access Tokens. Fine-grained, with "Make calls to Inference Providers" and, under Repositories, "Write access to contents/settings of all repos under your personal namespace" (the ledger sync creates and writes the dataset) | Model inference, ledger sync |
 | `GITHUB_TOKEN` | A fine-grained token on the account that will open PRs. Repository access: all repositories. Permissions: Contents, Pull requests, Issues: read and write; Administration: read and write (forking); Metadata: read | Forks, pushes through the API, PRs, comments |
 | `FIRECRAWL_API_KEY` | firecrawl.dev dashboard | Developer Index |
 | `TELEGRAM_BOT_TOKEN`, `TELEGRAM_ALLOWED_IDS` | @BotFather (`/newbot`), and your numeric id from @userinfobot | Run summaries |
-| `LEDGER_BUCKET` | Create a bucket on huggingface.co (e.g. `ashish-soni08/pr-agent-ledger`) | The UI reads the ledger from here |
+| `LEDGER_DATASET` | A Hugging Face dataset repo name, e.g. `ashish-soni08/pr-agent-ledger`. The first sync creates it, private | The UI reads the ledger from here |
 
 Export them in your SSH shell only when a step asks. Don't write them into files in the repo, and don't paste them in chat.
 
@@ -93,22 +93,22 @@ What a good first run looks like in the ledger: a `start` row; six or fewer `dis
 
 **Repos with no written AI policy.** `continue_on_unclear_policy` is `true` (decided 2026-10-01), so the agent also works in repos that say nothing about AI contributions, which is most of them. Every PR and claim still says it was written by an AI agent. When a maintainer says no to AI contributions, the agent runs `pr-agent policy <repo> --block`, which marks the repo `bans` permanently (stored in `state/policy/blocked.json`; no cache expiry undoes it). To check what's blocked: `nemohermes pr-agent exec -- cat /sandbox/.pr-agent/state/policy/blocked.json`. Set the switch to `false` and redeploy to go back to explicit-policy repos only.
 
-## 6. Ledger to the Hugging Face bucket (for the UI)
+## 6. Ledger to the Hugging Face dataset (for the UI)
 
 ```bash
 crontab -e
 # add (one line):
-*/30 * * * * cd $HOME/nemoclaw-pr-agent && HF_TOKEN=<token> LEDGER_BUCKET=<you/bucket> scripts/sync-ledger.sh >> $HOME/pr-agent-sync.log 2>&1
+*/30 * * * * cd $HOME/nemoclaw-pr-agent && HF_TOKEN=<token> LEDGER_DATASET=<you/pr-agent-ledger> scripts/sync-ledger.sh >> $HOME/pr-agent-sync.log 2>&1
 ```
 
-The crontab holds the token in plain text on the VM, readable only by your user. If you'd rather not, run `scripts/sync-ledger.sh` by hand before demos. Files in the bucket:
+The crontab holds the token in plain text on the VM, readable only by your user. If you'd rather not, run `scripts/sync-ledger.sh` by hand before demos. Each sync is one commit to the dataset. Files in the dataset:
 
 - `ledger/decisions.tsv`: every decision (ts, run, phase, subject, decision, why, evidence, result)
 - `ledger/spend.tsv`: per-provider spend snapshots (ts, provider, used, unit, cost_usd, remaining, limit, source) for Hugging Face, Firecrawl and Lambda
 - `ledger/runs/<run>/candidates.jsonl`: what discovery handed to triage
 - `ledger/media/<issue>/`: before and after captures
 
-Set `ledger.public_url` in `config/agent.yaml` to the bucket's public URL so PR footers link to the ledger, then redeploy.
+The dataset is created private, so only you (and the UI, with your token) can read it. To let maintainers follow the footer link in each PR, make the dataset public in its settings, set `ledger.public_url` in `config/agent.yaml` to `https://huggingface.co/datasets/<you>/pr-agent-ledger`, and redeploy.
 
 ## 7. Fallback: Hermes directly on the VM (no sandbox)
 
@@ -130,6 +130,6 @@ hermes gateway run   # in tmux; it ticks the cron jobs
 ## 8. Stop, pause, inspect
 
 - Pause the agent: `nemohermes pr-agent exec -- hermes cron pause <job-id>` (ids from `hermes cron list`).
-- Everything it did: `scripts/status.sh 200`, or the bucket.
+- Everything it did: `scripts/status.sh 200`, or the dataset.
 - Spend right now: `nemohermes pr-agent exec -- /sandbox/nemoclaw-pr-agent/bin/pr-agent spend`.
 - The agent never merges and never pushes to anyone else's branch. To withdraw a PR, close it on GitHub; the next follow-up logs the outcome.

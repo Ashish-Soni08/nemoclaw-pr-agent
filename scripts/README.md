@@ -9,4 +9,4 @@ Host-side lifecycle for the Lambda VM, following the NemoClaw community recipe l
 | `deploy.sh` | Uploads this repo, installs the skills and SOUL.md, applies Hermes settings, registers cron jobs |
 | `run-now.sh` | Triggers a run immediately |
 | `status.sh` | Cron state, last ledger rows, spend |
-| `sync-ledger.sh` | Copies the ledger out and mirrors it to the Hugging Face bucket (host crontab) |
+| `sync-ledger.sh` | Copies the ledger out and mirrors it to the Hugging Face dataset (host crontab) |

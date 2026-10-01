@@ -17,7 +17,7 @@ A long-running agent that finds issues in AI, data-science and data-analysis rep
 | Issues | No type restriction. Any issue in a Python AI/data-science repo the agent can genuinely help with; triage decides |
 | PR format | poteto's: Why, Scope, Blast Radius, Verification. Conventional Commits titles |
 | Discovery | Firecrawl Developer Index on every run, each hit verified live on GitHub |
-| Record | `decisions.tsv` and `spend.tsv`, synced from the host to a Hugging Face bucket |
+| Record | `decisions.tsv` and `spend.tsv`, synced from the host to a Hugging Face dataset |
 | Notifications | Telegram run summaries and a daily digest. No approvals over Telegram |
 
 ## The model decides, scripts act

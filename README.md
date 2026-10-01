@@ -23,7 +23,7 @@ Hermes cron (every 4h, inside the NemoClaw sandbox)
 follow-up cron (every 2h): review comments on its PRs, maintainer replies to its claims
 ```
 
-Everything the agent decides lands in `decisions.tsv` (one row per decision: what, why, evidence), and per-provider spend in `spend.tsv`. Both sync to a Hugging Face bucket for the UI.
+Everything the agent decides lands in `decisions.tsv` (one row per decision: what, why, evidence), and per-provider spend in `spend.tsv`. Both sync to a Hugging Face dataset for the UI.
 
 ## Layout
 
