@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { CreditsPanel } from "@/components/credits-panel";
 import { EntryDetail } from "@/components/entry-detail";
 import { HealthStrip } from "@/components/health-strip";
+import { RunsPanel } from "@/components/runs-panel";
 import { SpendHistory } from "@/components/spend-history";
 import { Label, OutcomePill, Pill, verdictTone } from "@/components/status";
 import { ThemeToggle } from "@/components/theme-toggle";
@@ -70,6 +71,7 @@ export function Dashboard({ view }: { view: View }) {
         <div className="flex justify-center border-b pb-2.5">
           <TabsList>
             <TabsTrigger value="activity">Activity</TabsTrigger>
+            <TabsTrigger value="runs">Runs</TabsTrigger>
             <TabsTrigger value="repos">Repos</TabsTrigger>
           </TabsList>
         </div>
@@ -120,6 +122,10 @@ export function Dashboard({ view }: { view: View }) {
               {selected ? <EntryDetail entry={selected} all={view.entries} /> : <p className="p-4 text-sm text-muted-foreground">Pick an entry to see why the agent did it.</p>}
             </section>
           </div>
+        </TabsContent>
+
+        <TabsContent value="runs">
+          <RunsPanel runs={view.runs} rejections={view.rejections} models={view.models} tokensMissing={view.tokensFromSample} />
         </TabsContent>
 
         <TabsContent value="repos">

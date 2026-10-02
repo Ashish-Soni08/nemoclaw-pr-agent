@@ -9,7 +9,7 @@ const STALE_MS = 2 * 60 * 60 * 1000;
 
 export function HealthStrip({ health, now }: { health: Health; now: string }) {
   const stale = !health.lastActivity || Date.parse(now) - Date.parse(health.lastActivity) > STALE_MS;
-  const runTone = health.runState === "stopped by budget" ? "text-warn" : health.runState === "running" ? "text-primary" : "";
+  const runTone = health.runState === "stalled" || health.runState === "failed" ? "text-bad" : health.runState === "stopped by budget" ? "text-warn" : health.runState === "running" ? "text-primary" : "";
   const lastError = health.errors24h.at(-1);
   return (
     <section aria-label="Agent health" className="grid grid-cols-1 gap-px overflow-hidden rounded-lg border bg-border sm:grid-cols-2 lg:grid-cols-4">

@@ -1,4 +1,4 @@
-import type { Decision, Ledger, Spend } from "./ledger";
+import type { Decision, Ledger, Spend, TokenRow } from "./ledger";
 
 // Everything the page shows is computed here from the two ledger files, so the
 // page can never show something the agent did not log.
@@ -27,10 +27,33 @@ export type Credit = {
 export type Health = {
   lastActivity: string | null;
   currentRun: string | null;
-  runState: "running" | "finished" | "stopped by budget" | "no runs yet";
+  runState: RunState | "no runs yet";
   runsToday: number;
   errors24h: Entry[];
 };
+
+export type RunState = "running" | "finished" | "stopped by budget" | "stalled" | "failed";
+
+export type RunRow = {
+  run: string;
+  started: string;
+  lastRow: string;
+  state: RunState;
+  stateWhy: string;
+  found: number;
+  attempted: number;
+  passedGate: number;
+  opened: number;
+  merged: number;
+  closed: number;
+  rejected: number;
+  tokens: number | null;
+  costUsd: number | null;
+};
+
+export type Rejection = { ts: string; run: string; subject: string; phase: string; reason: string; evidence: string };
+
+export type ModelUse = { model: string; runs: number; tokensIn: number; tokensOut: number; costUsd: number };
 
 export type DayTotals = { day: string; huggingface: number; lambda: number; firecrawl: number; prs: number };
 
@@ -45,6 +68,10 @@ export type View = {
   stagesByDay: Record<string, Stage[]>;
   credits: Credit[];
   history: DayTotals[];
+  runs: RunRow[];
+  rejections: Rejection[];
+  models: ModelUse[];
+  tokensFromSample: boolean;
   health: Health;
   repos: RepoRow[];
 };
@@ -178,20 +205,78 @@ function history(spend: Spend[], entries: Entry[], now: string): DayTotals[] {
   }));
 }
 
-function health(entries: Entry[], now: string): Health {
-  const starts = entries.filter((e) => e.phase === "start");
-  const lastStart = starts[starts.length - 1];
-  let runState: Health["runState"] = "no runs yet";
-  if (lastStart) {
-    const runRows = entries.filter((e) => e.run === lastStart.run);
-    if (runRows.some((e) => e.phase === "guard" && e.result === "skipped")) runState = "stopped by budget";
-    else if (runRows.some((e) => e.phase === "run.end")) runState = "finished";
-    else runState = "running";
+// A run with no run.end whose newest row is this old has stopped making progress
+// (a crash, or a prompt waiting for approval that never comes).
+const STALL_MS = 2 * 60 * 60 * 1000;
+
+function runs(entries: Entry[], tokens: TokenRow[], now: string): RunRow[] {
+  const ids = [...new Set(entries.map((e) => e.run).filter(Boolean))];
+  // pr.outcome rows can land in a later run than the PR, so match them by issue.
+  const outcomes = entries.filter((e) => e.phase === "pr.outcome");
+  return ids
+    .map((run) => {
+      const rows = entries.filter((e) => e.run === run);
+      const by = (phase: string) => rows.filter((e) => e.phase === phase);
+      const opened = by("pr.opened");
+      const outcomeOf = (r: string) => outcomes.filter((o) => opened.some((p) => p.subject === o.subject) && o.result === r).length;
+      const lastRow = rows.at(-1)!.ts;
+      const errors = rows.filter((e) => e.outcome === "error");
+      const guard = rows.find((e) => e.phase === "guard" && e.result === "skipped");
+      let state: RunState = "running";
+      let stateWhy = "no run.end yet";
+      if (guard) [state, stateWhy] = ["stopped by budget", guard.why];
+      else if (rows.some((e) => e.phase === "run.end")) [state, stateWhy] = ["finished", rows.findLast((e) => e.phase === "run.end")!.why];
+      else if (Date.parse(now) - Date.parse(lastRow) > STALL_MS)
+        [state, stateWhy] = errors.length ? ["failed", errors.at(-1)!.why] : ["stalled", `no new rows since ${lastRow.slice(11, 16)} UTC; last step ${rows.at(-1)!.phase}`];
+      const t = tokens.filter((x) => x.run === run);
+      return {
+        run,
+        started: rows[0].ts,
+        lastRow,
+        state,
+        stateWhy,
+        found: by("discover.verify").length,
+        attempted: new Set(rows.filter((e) => e.phase.startsWith("fix.")).map((e) => e.subject)).size,
+        passedGate: by("gate").filter((e) => e.result === "pass").length,
+        opened: opened.length,
+        merged: outcomeOf("merged"),
+        closed: outcomeOf("closed"),
+        rejected: by("gate").filter((e) => e.result !== "pass").length + by("pr.refused").filter((e) => !by("gate").some((g) => g.subject === e.subject && g.result !== "pass")).length,
+        tokens: t.length ? t.reduce((a, x) => a + x.tokens_in + x.tokens_out, 0) : null,
+        costUsd: t.length ? t.reduce((a, x) => a + x.cost_usd, 0) : null,
+      };
+    })
+    .sort((a, b) => b.started.localeCompare(a.started));
+}
+
+function rejections(entries: Entry[]): Rejection[] {
+  const gateFails = entries.filter((e) => e.phase === "gate" && e.result !== "pass");
+  const refused = entries.filter((e) => e.phase === "pr.refused" && !gateFails.some((g) => g.subject === e.subject && g.run === e.run));
+  return [...gateFails, ...refused]
+    .map((e) => ({ ts: e.ts, run: e.run, subject: e.subject, phase: e.phase, reason: e.why, evidence: e.evidence }))
+    .sort((a, b) => b.ts.localeCompare(a.ts));
+}
+
+function models(tokens: TokenRow[]): ModelUse[] {
+  const m = new Map<string, ModelUse & { runSet: Set<string> }>();
+  for (const t of tokens) {
+    const u = m.get(t.model) ?? { model: t.model, runs: 0, tokensIn: 0, tokensOut: 0, costUsd: 0, runSet: new Set<string>() };
+    u.tokensIn += t.tokens_in;
+    u.tokensOut += t.tokens_out;
+    u.costUsd += t.cost_usd;
+    u.runSet.add(t.run);
+    m.set(t.model, u);
   }
+  return [...m.values()].map(({ runSet, ...u }) => ({ ...u, runs: runSet.size })).sort((a, b) => b.costUsd - a.costUsd);
+}
+
+function health(entries: Entry[], latestRun: RunRow | undefined, now: string): Health {
+  const starts = entries.filter((e) => e.phase === "start");
+  const runState: Health["runState"] = latestRun?.state ?? "no runs yet";
   const since = new Date(Date.parse(now) - 86400_000).toISOString();
   return {
     lastActivity: entries.length ? entries[entries.length - 1].ts : null,
-    currentRun: lastStart?.run ?? null,
+    currentRun: latestRun?.run ?? null,
     runState,
     runsToday: starts.filter((s) => day(s.ts) === day(now)).length,
     errors24h: entries.filter((e) => e.outcome === "error" && e.ts >= since),
@@ -220,6 +305,7 @@ export function derive(ledger: Ledger): View {
   const now = ledger.origin.kind === "sample" && latest ? latest : ledger.fetchedAt;
   const days = [...new Set(entries.map((e) => e.day))].sort().reverse();
   const stagesByDay = Object.fromEntries(days.map((d) => [d, stages(entries.filter((e) => e.day === d))]));
+  const runRows = runs(entries, ledger.tokens, now);
   return {
     origin: ledger.origin,
     fetchedAt: ledger.fetchedAt,
@@ -229,7 +315,11 @@ export function derive(ledger: Ledger): View {
     stagesByDay,
     credits: credits(ledger.spend, now),
     history: history(ledger.spend, entries, now),
-    health: health(entries, now),
+    runs: runRows,
+    rejections: rejections(entries),
+    models: models(ledger.tokens),
+    tokensFromSample: ledger.origin.kind === "sample",
+    health: health(entries, runRows[0], now),
     repos: repos(entries),
   };
 }

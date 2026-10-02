@@ -1,4 +1,10 @@
 ts	run	phase	subject	decision	why	evidence	result
+2026-09-29T08:00:02Z	r-0929-a	start	r-0929-a	started scheduled run	cron tick	host=lambda-a10	open
+2026-09-29T08:00:09Z	r-0929-a	guard	usage	skipped run	Firecrawl per-run backstop already reached by a retry loop	state.db	skipped
+2026-09-29T14:00:03Z	r-0929-b	start	r-0929-b	started scheduled run	cron tick	host=lambda-a10	open
+2026-09-29T14:01:11Z	r-0929-b	discover.query	ml bugs good first issue	searched issues	topic=ml	q=77aa	ok
+2026-09-29T14:02:40Z	r-0929-b	discover.verify	plotwise/plotwise#80	kept	live GitHub check	https://github.com/plotwise/plotwise/issues/80	kept
+2026-09-29T14:03:55Z	r-0929-b	fix.workspace	plotwise/plotwise#80	prepared workspace	base main@19ac0b2e4d	/sandbox/work/plotwise-80	ready
 2026-09-30T08:00:04Z	r-0930-a	start	r-0930-a	started scheduled run	cron tick	host=lambda-a10	open
 2026-09-30T08:01:12Z	r-0930-a	discover.query	ml bugs good first issue	searched issues	topic=ml	q=4f1a	ok
 2026-09-30T08:03:40Z	r-0930-a	discover.verify	tabular-labs/frameframe#1188	kept	live GitHub check	https://github.com/tabular-labs/frameframe/issues/1188	kept
@@ -48,3 +54,8 @@ ts	run	phase	subject	decision	why	evidence	result
 2026-10-01T14:46:55Z	r-1001-b	fix.test.after	tabular-labs/frameframe#1215	ran pytest -q	after run	60 passed in 44s (+2)	exit 0
 2026-10-01T14:48:01Z	r-1001-b	gate	tabular-labs/frameframe#1215	self-review gate pass	change limited to the dtype check; tests cover both paths	diff 91be04	pass
 2026-10-01T14:49:12Z	r-1001-b	pr.opened	tabular-labs/frameframe#1215	opened tabular-labs/frameframe#1219	self-review gate passed on this diff	https://github.com/tabular-labs/frameframe/pull/1219	open
+2026-10-01T15:05:40Z	r-1001-b	pr.outcome	tabular-labs/frameframe#1188	merged tabular-labs/frameframe#1207	maintainer merged after review	https://github.com/tabular-labs/frameframe/pull/1207	merged
+2026-10-01T15:20:10Z	r-1001-b	triage	gridstat/gridstat#21	take (bug; bug-fix)	Repro in the issue; fix touches one function.	https://github.com/gridstat/gridstat/issues/21	take
+2026-10-01T15:41:30Z	r-1001-b	fix.test.after	gridstat/gridstat#21	ran pytest -q	after run	41 passed in 12s	exit 0
+2026-10-01T15:43:02Z	r-1001-b	gate	gridstat/gridstat#21	self-review gate fail	diff also reformats 3 unrelated files; the new test does not fail before the fix	diff 5aa0c2	fail
+2026-10-01T15:43:20Z	r-1001-b	pr.refused	gridstat/gridstat#21	did not open PR	self-review gate failed	/sandbox/work/gridstat-21	refused

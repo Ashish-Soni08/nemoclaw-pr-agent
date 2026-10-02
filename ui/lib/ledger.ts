@@ -24,9 +24,20 @@ export type Spend = {
   source: string;
 };
 
+// tokens.tsv: one row per model per run. Proposed to the agent; not written by it yet.
+export type TokenRow = {
+  ts: string;
+  run: string;
+  model: string;
+  tokens_in: number;
+  tokens_out: number;
+  cost_usd: number;
+};
+
 export type Ledger = {
   decisions: Decision[];
   spend: Spend[];
+  tokens: TokenRow[];
   origin: { kind: "dataset"; dataset: string } | { kind: "sample" };
   fetchedAt: string;
 };
@@ -73,6 +84,17 @@ function toSpend(text: string): Spend[] {
   }));
 }
 
+function toTokens(text: string): TokenRow[] {
+  return parseTsv(text).map((r) => ({
+    ts: r.ts,
+    run: r.run,
+    model: r.model,
+    tokens_in: num(r.tokens_in) ?? 0,
+    tokens_out: num(r.tokens_out) ?? 0,
+    cost_usd: num(r.cost_usd) ?? 0,
+  }));
+}
+
 async function fromDataset(dataset: string, file: string): Promise<string> {
   // The dataset is private, so the read token stays on the server.
   const headers: Record<string, string> = {};
@@ -93,10 +115,11 @@ async function fromSample(file: string): Promise<string> {
 export async function loadLedger(): Promise<Ledger> {
   const dataset = process.env.LEDGER_DATASET?.replace(/^datasets\//, "").replace(/\/+$/, "");
   const read = dataset ? (f: string) => fromDataset(dataset, f) : fromSample;
-  const [d, s] = await Promise.all([read("decisions.tsv"), read("spend.tsv")]);
+  const [d, s, t] = await Promise.all([read("decisions.tsv"), read("spend.tsv"), read("tokens.tsv").catch(() => "")]);
   return {
     decisions: toDecisions(d),
     spend: toSpend(s),
+    tokens: toTokens(t),
     origin: dataset ? { kind: "dataset", dataset } : { kind: "sample" },
     fetchedAt: new Date().toISOString(),
   };

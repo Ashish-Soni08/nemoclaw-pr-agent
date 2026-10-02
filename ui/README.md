@@ -34,3 +34,6 @@ All numbers are computed in `lib/derive.ts` from those two files:
 - **Spend and output over time**: those per-day amounts plus `pr.opened` rows per day, grouped by day, month or year.
 - **Funnel**: for the latest day, counts of `discover.verify`, `policy`, `triage`, `claim.*`/`fix.*` and `pr.opened` rows for the day.
 - **Repos**: the latest `policy` row per repo.
+- **Runs tab**: one row per `run` id. Found = `discover.verify` rows, attempted = issues with `fix.*` rows, passed gate = `gate` rows with result `pass`, merged/closed = `pr.outcome` rows (matched to the run's `pr.opened` by issue). State: `guard`+`skipped` is stopped by budget, `run.end` is finished, otherwise stalled (or failed, if it logged an error) once the newest row is 2 hours old.
+- **Gate rejections**: `gate` rows whose result isn't `pass`, plus `pr.refused` rows, with the `why` as the reason.
+- **Tokens by model**: `ledger/tokens.tsv` (`ts run model tokens_in tokens_out cost_usd`, one row per model per run). The agent doesn't write this file yet; until it does, the panel says so (the sample shows what it will look like).
