@@ -31,9 +31,9 @@ fi
 unset COMPATIBLE_API_KEY
 
 say "Egress: PyPI (target repos' test deps) and read-only git clone"
-nemohermes "$SANDBOX" policy add pypi --yes
-nemohermes "$SANDBOX" policy add --from-file "$REPO_DIR/policies/presets/pr-agent-git.yaml" --yes
-nemohermes "$SANDBOX" policy add --from-file "$REPO_DIR/policies/presets/pr-agent-api.yaml" --yes
+nemohermes "$SANDBOX" policy add pypi --yes || echo "(policy already applied)"
+nemohermes "$SANDBOX" policy add --from-file "$REPO_DIR/policies/presets/pr-agent-git.yaml" --yes || echo "(policy already applied)"
+nemohermes "$SANDBOX" policy add --from-file "$REPO_DIR/policies/presets/pr-agent-api.yaml" --yes || echo "(policy already applied)"
 
 if [[ -n "${TELEGRAM_BOT_TOKEN:-}" ]]; then
   need_env TELEGRAM_ALLOWED_IDS "your numeric Telegram user id, from @userinfobot"
