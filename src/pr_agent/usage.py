@@ -105,9 +105,17 @@ def router_models(base_url: str, token: str) -> dict[str, dict[str, Any]]:
         live = [p for p in m.get("providers") or [] if p.get("status", "live") == "live"]
         priced = [p for p in live if (p.get("pricing") or {}).get("input") is not None]
         cheapest = min(priced, key=lambda p: p["pricing"]["input"] + p["pricing"].get("output", 0), default=None)
+        with_tools = [p for p in priced if p.get("supports_tools")]
+        cheapest_tools = min(with_tools, key=lambda p: p["pricing"]["input"] + p["pricing"].get("output", 0), default=None)
         out[m["id"]] = {
             "price_in": cheapest["pricing"]["input"] if cheapest else None,
             "price_out": cheapest["pricing"].get("output") if cheapest else None,
+            # The model id to configure so the router always uses the cheapest provider that can call tools.
+            "pin": f"{m['id']}:{cheapest_tools['provider']}" if cheapest_tools and cheapest_tools.get("provider") else None,
+            "pin_price": [cheapest_tools["pricing"]["input"], cheapest_tools["pricing"].get("output")] if cheapest_tools else None,
+            "providers": sorted(
+                ({"provider": p.get("provider"), "in": p["pricing"]["input"], "out": p["pricing"].get("output"), "tools": bool(p.get("supports_tools"))} for p in priced),
+                key=lambda r: r["in"] + (r["out"] or 0)),
             "tools": any(p.get("supports_tools") for p in live) if live else None,
             "context": max((p.get("context_length") or 0 for p in live), default=0) or None,
         }

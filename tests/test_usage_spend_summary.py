@@ -138,3 +138,25 @@ def test_run_summary_groups_extra_skips(tmp_path):
     assert "🛡️ **AI policy** 1 allow · 1 unclear · 0 ban" in text
     assert "• d, e: reasons in the ledger" in text
     assert "o/d#3" not in text
+
+
+def test_router_models_pins_cheapest_provider_with_tools(monkeypatch):
+    from pr_agent import usage
+
+    data = {"data": [{"id": "a/m", "providers": [
+        {"provider": "cheap", "status": "live", "pricing": {"input": 0.1, "output": 0.2}, "supports_tools": False},
+        {"provider": "mid", "status": "live", "pricing": {"input": 0.3, "output": 0.5}, "supports_tools": True},
+        {"provider": "pricey", "status": "live", "pricing": {"input": 1.0, "output": 2.0}, "supports_tools": True},
+    ]}]}
+
+    class FakeClient:
+        def __init__(self, *a, **k):
+            pass
+
+        def get_json(self, path):
+            return data
+
+    monkeypatch.setattr(usage, "Client", FakeClient)
+    got = usage.router_models("https://router", "t")["a/m"]
+    assert got["pin"] == "a/m:mid" and got["pin_price"] == [0.3, 0.5]
+    assert [p["provider"] for p in got["providers"]] == ["cheap", "mid", "pricey"]
