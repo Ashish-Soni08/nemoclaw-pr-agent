@@ -10,7 +10,8 @@ need_env FIRECRAWL_API_KEY "Firecrawl API key"
 
 register() {  # profile-file provider-name profile-id env-name value
   local file="$1" name="$2" id="$3" env="$4" value="$5"
-  openshell provider profile import --file "$file"
+  # First run imports the profile; later runs update it in place (import refuses existing ids).
+  openshell provider profile import --file "$file" 2>/dev/null || openshell provider profile update --file "$file"
   if openshell provider list 2>/dev/null | grep -qw "$name"; then
     env "$env=$value" openshell provider update "$name" --credential "$env"
   else
