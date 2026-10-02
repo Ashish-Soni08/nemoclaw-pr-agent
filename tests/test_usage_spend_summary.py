@@ -71,15 +71,17 @@ def test_run_summary_reads_only_the_ledger(tmp_path):
     Ledger(tmp_path / "d.tsv", "other").log("triage", "issue:x/y#1", "take", "not this run", "", "take")
     reg = Registry(tmp_path)
     reg.save_pr("o/a#9", {"state": "open", "url": "https://github.com/o/a/pull/9", "title": "fix(a): cast"})
-    text = run_summary(led.run_rows("r1"), reg, "r1", "Model spend today $0.40.")
-    assert "**Scouted:** 40 hits, 12 verified, 3 candidates" in text
-    assert "**Dropped:** 2 assigned" in text
-    assert "**Took 1 of 2**" in text
-    assert "• **o/a#3** (go-directly)\n  clear repro, one function" in text
+    text = run_summary(led.run_rows("r1"), reg, "r1", "$0.40 / $400 HF", "https://huggingface.co/datasets/me/l/viewer")
+    assert "🔎 **Found** 40 → 12 live on GitHub → 3 candidates" in text
+    assert "🚮 **Dropped** 2 assigned" in text
+    assert "✅ **Took 1**" in text
+    assert "• [o/a#3](https://github.com/o/a/issues/3): clear repro, one function" in text
     assert "🚀 PR opened: https://github.com/o/a/pull/9" in text
-    assert "• o/a#4: needs a design decision" in text
+    assert "⏭️ **Skipped 1**\n• o/a#4: needs a design decision" in text
     assert "x/y#1" not in text
     assert "1 open PRs" in text
+    assert "💸 **Spend** $0.40 / $400 HF" in text
+    assert "📒 [Full ledger](https://huggingface.co/datasets/me/l/viewer)" in text
 
 
 def test_run_summary_shows_why_a_take_stopped(tmp_path):
@@ -89,8 +91,8 @@ def test_run_summary_shows_why_a_take_stopped(tmp_path):
     led.log("issue.stop", "issue:o/a#5", "stopped: cannot post claim (token 403 in this org)", "plan saved", "/sandbox/plan.md", "stopped")
     text = run_summary(led.run_rows("r1"), Registry(tmp_path), "r1")
     assert text.count("o/a#5") == 1
-    assert "  Docs drift with three live findings\n  https://github.com/o/a/issues/5" in text
-    assert "⛔ Stopped: cannot post claim (token 403 in this org)" in text
+    assert "• [o/a#5](https://github.com/o/a/issues/5): Docs drift with three live findings" in text
+    assert "   ⛔ Stopped: cannot post claim (token 403 in this org)" in text
 
 
 def test_daily_digest_counts_the_day(tmp_path):
@@ -101,10 +103,13 @@ def test_daily_digest_counts_the_day(tmp_path):
     led.log("triage", "issue:o/a#2", "skip", "not a bug", "", "skip")
     led.log("pr.opened", "issue:o/a#1", "opened o/a#9", "gate passed", "https://github.com/o/a/pull/9", "open")
     day = led.rows()[0]["ts"][:10]
-    text = daily_digest(led.rows(), Registry(tmp_path), day)
-    assert "1 runs · 2 issues triaged · 1 taken · 1 skipped" in text
-    assert "1 PRs opened" in text
-    assert "https://github.com/o/a/pull/9" in text
+    led.log("issue.stop", "issue:o/a#3", "stopped: cannot post claim (token 403)", "plan saved", "", "stopped")
+    text = daily_digest(led.rows(), Registry(tmp_path), day, ["Today $1.20", "Left: $388 HF"])
+    assert "1 runs · 2 triaged · 1 taken · 1 PRs" in text
+    assert "• 🚀 https://github.com/o/a/pull/9" in text
+    assert "🏁 PRs all-time: none yet" in text
+    assert "💸 Today $1.20\nLeft: $388 HF" in text
+    assert "⚠️ **Needs you**\n• o/a#3: cannot post claim (token 403)" in text
 
 
 def test_tokens_for_one_run(tmp_path):
@@ -121,3 +126,15 @@ def test_tokens_for_one_run(tmp_path):
     header, row = out.read_text().splitlines()
     assert header.split("\t") == ["ts", "run", "subject", "step", "model", "tokens_in", "tokens_out", "cost_usd"]
     assert row.split("\t")[1:] == ["run-1", "-", "pr-agent-run", "Qwen/Qwen3.5-397B-A17B", "1000000", "500000", "1.8000"]
+
+
+def test_run_summary_groups_extra_skips(tmp_path):
+    led = Ledger(tmp_path / "d.tsv", "r1")
+    led.log("policy", "o/a", "AI policy allows", "AGENTS.md", "-", "allows")
+    led.log("policy", "o/b", "AI policy unclear", "none", "-", "unclear")
+    for i, repo in enumerate(["a", "b", "c", "d", "e"]):
+        led.log("triage", f"issue:o/{repo}#{i}", "skip", f"reason {i}", "", "skip")
+    text = run_summary(led.run_rows("r1"), Registry(tmp_path), "r1")
+    assert "🛡️ **AI policy** 1 allow · 1 unclear · 0 ban" in text
+    assert "• d, e: reasons in the ledger" in text
+    assert "o/d#3" not in text
