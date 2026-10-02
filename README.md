@@ -83,7 +83,7 @@ All models run through the Hugging Face Inference Providers router. Prices are U
 | Role | Model | Price | Job |
 | --- | --- | --- | --- |
 | Main | `zai-org/GLM-5.3` | 0.90 / 4.00 | Triage, planning, delegation, gate synthesis, PR text |
-| Fix | `moonshotai/Kimi-K2.7-Code` | 0.68 / 3.40 | Fix sub-agents: code and tool use |
+| Fix | `moonshotai/Kimi-K3` | 2.70 / 13.50 | Fix sub-agents: code and tool use |
 | Fix backup | `Qwen/Qwen3-Coder-480B-A35B-Instruct` | 0.38 / 1.55 | Backup fix model |
 | Review | `deepseek-ai/DeepSeek-V4.1-Flash` | 0.20 / 0.60 | Independent review pass, a different model family from the fixer |
 | Fast | `zai-org/GLM-5.3-Flash` | 0.15 / 0.50 | Chores: compression, titles |
@@ -91,6 +91,12 @@ All models run through the Hugging Face Inference Providers router. Prices are U
 A usage guard prices every run against this menu and stops the agent once the monthly budget ($400) is spent.
 
 **Runs on:** [Hugging Face](https://huggingface.co) (models and the ledger dataset) · [Lambda](https://lambda.ai) (the VM) · [Firecrawl](https://www.firecrawl.dev) (issue discovery)
+
+## Watching it work: the ledger
+
+Nobody approves the agent's PRs before they open, so a human has to be able to check its work afterwards. Every decision it makes (each issue found, each policy check, each take or skip and why, each test run, gate verdict and PR) is one row in an append-only ledger with a reason and a link to the evidence. Tokens and spend go in the same ledger. The VM syncs it to a private Hugging Face dataset every 5 minutes, and a read-only dashboard shows it. That way you can see what the agent did, why, and what it cost, without ever exposing the VM or the sandbox.
+
+**Dashboard:** [nemoclaw-pr-agent-ledger.vercel.app](https://nemoclaw-pr-agent-ledger.vercel.app)
 
 ## Demo video
 

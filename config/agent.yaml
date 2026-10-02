@@ -48,10 +48,10 @@ models:
     price_out: 4.0
     note: main model (Ultra failed onboarding); triage, delegation, gate synthesis, PR text
   - id: moonshotai/Kimi-K2.7-Code
-    roles: [fix]
+    roles: [candidate]
     price_in: 0.68
     price_out: 3.4
-    note: fix sub-agents; code and tool use
+    note: was the fix model until 2026-10-02 (Ashish switched fix to Kimi K3)
   - id: Qwen/Qwen3-Coder-480B-A35B-Instruct
     roles: [fix-backup]
     price_in: 0.38
@@ -68,10 +68,10 @@ models:
     price_out: 0.5
     note: auxiliary chores (compression, titles)
   - id: moonshotai/Kimi-K3
-    roles: [candidate]
+    roles: [fix]
     price_in: 2.7
     price_out: 13.5
-    note: candidate; checked by `pr-agent models`
+    note: fix sub-agents; code and tool use (Ashish, 2026-10-02)
   - id: MiniMaxAI/MiniMax-M3
     roles: [candidate]
     price_in: 0.28

@@ -62,5 +62,5 @@ def test_run_start_records_run_config(home):
     assert rows[0] == ["run", "key", "value"]
     got = {k: v for r, k, v in rows[1:] if r == run}
     assert got["config"].startswith("config/agent.yaml @ ")
-    assert got["model.triage"] == "zai-org/GLM-5.3" and got["model.fix"] == "moonshotai/Kimi-K2.7-Code"
+    assert got["model.triage"] == "zai-org/GLM-5.3" and got["model.fix"] == "moonshotai/Kimi-K3"
     assert set(got) >= {"model.gate", "model.summary", "firecrawl.per_run_credits", "schedule"}
