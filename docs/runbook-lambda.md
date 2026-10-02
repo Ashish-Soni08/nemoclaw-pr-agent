@@ -9,7 +9,7 @@ Items marked **VERIFY** could not be tested from the build session (NemoClaw, Fi
 | Key | Where to get it | Used by |
 | --- | --- | --- |
 | `HF_TOKEN` | huggingface.co, Settings, Access Tokens. Fine-grained, with "Make calls to Inference Providers" and, under Repositories, "Write access to contents/settings of all repos under your personal namespace" (the ledger sync creates and writes the dataset) | Model inference, ledger sync |
-| `GITHUB_TOKEN` | A fine-grained token on the account that will open PRs. Repository access: all repositories. Permissions: Contents, Pull requests, Issues: read and write; Administration: read and write (forking); Metadata: read | Forks, pushes through the API, PRs, comments |
+| `GITHUB_TOKEN` | A classic token with only the `public_repo` scope, ideally on a separate machine account that says it is an AI agent. Not fine-grained: a fine-grained token can only write to repos its owner (you, or an org that approved it) owns, so comments and PRs on other projects get HTTP 403 | Forks, pushes through the API, PRs, comments |
 | `FIRECRAWL_API_KEY` | firecrawl.dev dashboard | Developer Index |
 | `TELEGRAM_BOT_TOKEN`, `TELEGRAM_ALLOWED_IDS` | @BotFather (`/newbot`), and your numeric id from @userinfobot | Run summaries |
 | `LEDGER_DATASET` | A Hugging Face dataset repo name, e.g. `ashish-soni08/pr-agent-ledger`. The first sync creates it, private | The UI reads the ledger from here |
