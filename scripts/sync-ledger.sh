@@ -10,7 +10,7 @@ need_env HF_TOKEN "token with write access to the ledger dataset"
 need_env LEDGER_DATASET "e.g. your-hf-name/pr-agent-ledger"
 MIRROR="${PR_AGENT_MIRROR:-$HOME/.pr-agent-mirror}"
 mkdir -p "$MIRROR"
-nemohermes "$SANDBOX" download /sandbox/.pr-agent/ledger "$MIRROR/"
+nemohermes "$SANDBOX" download /sandbox/.pr-agent/ledger "$MIRROR/ledger/"
 # Ubuntu 24.04 blocks pip into the system Python (PEP 668), so use a venv next to the mirror.
 [[ -x "$MIRROR/.venv/bin/python" ]] || python3 -m venv "$MIRROR/.venv"
 "$MIRROR/.venv/bin/pip" install --quiet "huggingface_hub>=1.0" pyyaml
