@@ -11,4 +11,4 @@ The agent's record lives in `$PR_AGENT_HOME/ledger/` inside the sandbox (`/sandb
 | `runs/<run>/candidates.jsonl` | What discovery handed to triage in that run |
 | `media/<issue>/` | Before and after captures |
 
-Phases you'll see: `start`, `discover.query|seen|verify|precedent|summary`, `policy`, `triage`, `claim.*`, `fix.*`, `gate`, `pr.opened|refused|outcome` (`pr.outcome` is written by `pr-agent pr updates` and the follow-up pre-step when a PR is first seen merged or closed: subject = the `pr.opened` row's issue id, result `merged` or `closed`), `follow-up.*`, `guard`, `skill.flag`, `security.injection`, `run.end`.
+Phases you'll see: `start`, `discover.query|seen|verify|precedent|summary`, `policy`, `triage`, `claim.*`, `fix.*`, `gate`, `pr.opened|refused|outcome` (`pr.outcome` is written by `pr-agent pr updates` and the follow-up pre-step when a PR is first seen merged or closed: subject = the `pr.opened` row's issue id, result `merged` or `closed`), `follow-up.*`, `guard`, `lesson` (a note the agent also saved to Hermes memory), `skill.flag`, `security.injection`, `run.end`.
