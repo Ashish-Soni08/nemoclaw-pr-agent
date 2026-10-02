@@ -51,6 +51,8 @@ export type RunRow = {
   costUsd: number | null;
   config: { key: string; value: string }[];
   issues: IssueWork[];
+  // Token use the agent couldn't tie to one issue (subject "-"), e.g. a whole cron job.
+  runWide: StepUse[];
 };
 
 export type StepUse = { step: string; model: string; tokens: number; costUsd: number; result: string | null };
@@ -282,6 +284,10 @@ function runs(entries: Entry[], tokens: TokenRow[], config: ConfigRow[], now: st
         costUsd: t.length ? t.reduce((a, x) => a + x.cost_usd, 0) : null,
         config: config.filter((c) => c.run === run).map(({ key, value }) => ({ key, value })),
         issues: issueWork(run, rows, tokens, outcomes),
+        runWide: t
+          .filter((x) => x.subject === "-")
+          .map((x) => ({ step: x.step, model: x.model, tokens: x.tokens_in + x.tokens_out, costUsd: x.cost_usd, result: null }))
+          .sort((a, b) => stepRank(a.step) - stepRank(b.step)),
       };
     })
     .sort((a, b) => b.started.localeCompare(a.started));

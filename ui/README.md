@@ -39,7 +39,7 @@ All numbers are computed in `lib/derive.ts` from those two files:
 - **Run drill-down**: click a run for the settings it started with (`ledger/run_config.tsv`) and, per issue it worked on, which model did each step with tokens and cost (`ledger/tokens.tsv`).
 - **Tokens by model**: sums of `ledger/tokens.tsv`.
 
-Two files the agent doesn't write yet; until it does, those panels say what's missing (the sample shows what they'll look like):
+Two more files the agent writes (claude/build-pr-agent-nvg8ss). Today every `tokens.tsv` row is run-wide (`subject` is `-`, `step` is the cron job), so the drill-down shows it as "Whole run"; per-issue rows show up as soon as the agent can attribute them:
 
 | File | Columns | Written |
 | --- | --- | --- |

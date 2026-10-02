@@ -95,9 +95,9 @@ function toTokens(text: string): TokenRow[] {
   return parseTsv(text).map((r) => ({
     ts: r.ts,
     run: r.run,
-    subject: r.subject || "-",
-    step: r.step || "-",
-    model: r.model,
+    subject: unquote(r.subject) || "-",
+    step: unquote(r.step) || "-",
+    model: unquote(r.model),
     tokens_in: num(r.tokens_in) ?? 0,
     tokens_out: num(r.tokens_out) ?? 0,
     cost_usd: num(r.cost_usd) ?? 0,
@@ -129,7 +129,7 @@ export async function loadLedger(): Promise<Ledger> {
     decisions: toDecisions(d),
     spend: toSpend(s),
     tokens: toTokens(t),
-    config: parseTsv(c).map((r) => ({ run: r.run, key: r.key, value: r.value })),
+    config: parseTsv(c).map((r) => ({ run: r.run, key: r.key, value: unquote(r.value) })),
     origin: dataset ? { kind: "dataset", dataset } : { kind: "sample" },
     fetchedAt: new Date().toISOString(),
   };

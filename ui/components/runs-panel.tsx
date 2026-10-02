@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { Label, Pill, type Tone } from "@/components/status";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import type { ModelUse, Rejection, RunRow, RunState } from "@/lib/derive";
+import type { ModelUse, Rejection, RunRow, RunState, StepUse } from "@/lib/derive";
 import { clock, dayLabel, shortUrl, urls } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
@@ -194,7 +194,7 @@ function RunDetail({ run }: { run: RunRow }) {
 
       <div className="grid gap-2">
         <Label>Issues worked on</Label>
-        {run.issues.length === 0 ? (
+        {run.issues.length === 0 && run.runWide.length === 0 ? (
           <p className="text-sm text-muted-foreground">No issue reached triage, a claim or a fix in this run. {run.stateWhy}.</p>
         ) : (
           <Table>
@@ -212,29 +212,40 @@ function RunDetail({ run }: { run: RunRow }) {
                   <TableCell className="font-mono text-xs">{i.subject}</TableCell>
                   <TableCell className="max-w-[28ch] whitespace-normal"><Pill tone={i.tone}>{i.outcome}</Pill></TableCell>
                   <TableCell className="whitespace-normal">
-                    {i.steps.length === 0 ? (
-                      <span className="text-xs text-muted-foreground">no token rows for this issue</span>
-                    ) : (
-                      <div className="flex flex-wrap gap-1.5">
-                        {i.steps.map((s) => (
-                          <span key={`${s.step}-${s.model}`} className="inline-flex items-baseline gap-1.5 rounded-md border px-2 py-0.5 text-xs">
-                            <b className="font-semibold">{s.step}</b>
-                            <span className="font-mono text-muted-foreground" title={s.model}>{s.model.split("/").at(-1)}</span>
-                            <span className="font-mono text-muted-foreground">{compact(s.tokens)} · {usd(s.costUsd)}</span>
-                            {s.result ? <Pill tone={s.result === "pass" ? "ok" : "bad"}>{s.result}</Pill> : null}
-                          </span>
-                        ))}
-                      </div>
-                    )}
+                    <Steps steps={i.steps} />
                   </TableCell>
                   <TableCell className="text-right font-mono tabular-nums">{i.costUsd === null ? "–" : usd(i.costUsd)}</TableCell>
                 </TableRow>
               ))}
+              {run.runWide.length > 0 ? (
+                <TableRow className="align-top">
+                  <TableCell className="text-xs text-muted-foreground">Whole run</TableCell>
+                  <TableCell className="max-w-[28ch] text-xs whitespace-normal text-muted-foreground">not tied to one issue</TableCell>
+                  <TableCell className="whitespace-normal"><Steps steps={run.runWide} /></TableCell>
+                  <TableCell className="text-right font-mono tabular-nums">{usd(run.runWide.reduce((a, x) => a + x.costUsd, 0))}</TableCell>
+                </TableRow>
+              ) : null}
             </TableBody>
           </Table>
         )}
       </div>
     </section>
+  );
+}
+
+function Steps({ steps }: { steps: StepUse[] }) {
+  if (steps.length === 0) return <span className="text-xs text-muted-foreground">no token rows for this issue</span>;
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      {steps.map((s) => (
+        <span key={`${s.step}-${s.model}`} className="inline-flex items-baseline gap-1.5 rounded-md border px-2 py-0.5 text-xs">
+          <b className="font-semibold">{s.step}</b>
+          <span className="font-mono text-muted-foreground" title={s.model}>{s.model.split("/").at(-1)}</span>
+          <span className="font-mono text-muted-foreground">{compact(s.tokens)} · {usd(s.costUsd)}</span>
+          {s.result ? <Pill tone={s.result === "pass" ? "ok" : "bad"}>{s.result}</Pill> : null}
+        </span>
+      ))}
+    </div>
   );
 }
 
