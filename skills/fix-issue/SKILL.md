@@ -31,7 +31,7 @@ pr-agent workspace setup <ws>             # the repo's own toolchain: venv + pip
 pr-agent workspace test <ws> --label baseline [--cmd "<repo's own test command>"]
 ```
 
-Read CONTRIBUTING and the precedent PRs for the test command, style and changelog rules; pass `--cmd` if the detected one is wrong. A baseline that fails to install or has many failures unrelated to the issue → stop with `fix.abandoned` ("baseline broken"). A few pre-existing failures are fine; write them down so you don't blame yourself later.
+`prepare` prints `lessons` for this repo and globally; follow them (changelog rules, test style, what reviewers asked for last time). Read CONTRIBUTING and the precedent PRs for the test command, style and changelog rules; pass `--cmd` if the detected one is wrong. A baseline that fails to install or has many failures unrelated to the issue → stop with `fix.abandoned` ("baseline broken"). A few pre-existing failures are fine; write them down so you don't blame yourself later.
 
 ## 2. Already fixed?
 
