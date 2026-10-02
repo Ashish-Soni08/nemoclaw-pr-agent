@@ -72,14 +72,39 @@ def test_run_summary_reads_only_the_ledger(tmp_path):
     reg = Registry(tmp_path)
     reg.save_pr("o/a#9", {"state": "open", "url": "https://github.com/o/a/pull/9", "title": "fix(a): cast"})
     text = run_summary(led.run_rows("r1"), reg, "r1", "Model spend today $0.40.")
-    assert "Looked at: 40 hits, 12 verified, 3 candidates" in text
-    assert "Dropped on GitHub check: 2 assigned." in text
-    assert "Chose 1 of 2 candidates:" in text
-    assert "+ issue:o/a#3: clear repro, one function" in text
-    assert "- skipped issue:o/a#4: needs a design decision" in text
-    assert "https://github.com/o/a/pull/9" in text
+    assert "**Scouted:** 40 hits, 12 verified, 3 candidates" in text
+    assert "**Dropped:** 2 assigned" in text
+    assert "**Took 1 of 2**" in text
+    assert "• **o/a#3** (go-directly)\n  clear repro, one function" in text
+    assert "🚀 PR opened: https://github.com/o/a/pull/9" in text
+    assert "• o/a#4: needs a design decision" in text
     assert "x/y#1" not in text
     assert "1 open PRs" in text
+
+
+def test_run_summary_shows_why_a_take_stopped(tmp_path):
+    led = Ledger(tmp_path / "d.tsv", "r1")
+    led.log("triage", "issue:o/a#5", "take (ask-first; bug-fix)", "Docs drift with three live findings. Long detail follows here", "https://github.com/o/a/issues/5", "take")
+    led.log("triage", "issue:o/a#5", "take; 3 findings live", "investigation done", "/sandbox/ws", "take")
+    led.log("issue.stop", "issue:o/a#5", "stopped: cannot post claim (token 403 in this org)", "plan saved", "/sandbox/plan.md", "stopped")
+    text = run_summary(led.run_rows("r1"), Registry(tmp_path), "r1")
+    assert text.count("o/a#5") == 1
+    assert "  Docs drift with three live findings\n  https://github.com/o/a/issues/5" in text
+    assert "⛔ Stopped: cannot post claim (token 403 in this org)" in text
+
+
+def test_daily_digest_counts_the_day(tmp_path):
+    from pr_agent.summary import daily_digest
+    led = Ledger(tmp_path / "d.tsv", "r1")
+    led.log("start", "r1", "started", "cron tick", "", "open")
+    led.log("triage", "issue:o/a#1", "take", "fixable", "", "take")
+    led.log("triage", "issue:o/a#2", "skip", "not a bug", "", "skip")
+    led.log("pr.opened", "issue:o/a#1", "opened o/a#9", "gate passed", "https://github.com/o/a/pull/9", "open")
+    day = led.rows()[0]["ts"][:10]
+    text = daily_digest(led.rows(), Registry(tmp_path), day)
+    assert "1 runs · 2 issues triaged · 1 taken · 1 skipped" in text
+    assert "1 PRs opened" in text
+    assert "https://github.com/o/a/pull/9" in text
 
 
 def test_tokens_for_one_run(tmp_path):
