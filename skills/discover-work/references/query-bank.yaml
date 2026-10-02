@@ -1,0 +1,46 @@
+# Discovery query bank (design: /mnt/project-files/discovery/discovery-design.md).
+# Editable without code changes. Every run takes the next topics_per_run topics
+# and shapes_per_run shapes in the rotation (state/rotation.json).
+
+language: Python
+min_stars: 200
+max_stars: 30000
+k: 20
+topics_per_run: 3
+shapes_per_run: 2
+max_verify_per_run: 40
+max_candidates_per_run: 8
+max_credits_per_run: 1000      # effectively uncapped: a normal run spends about 15
+max_credits_per_month: 70000   # Ashish's whole Firecrawl credit
+precedent_reserve_credits: 10   # held back from search so survivors get a precedent query
+recheck_after_days: 14
+
+# Issue scope: no type restriction (Ashish, 2026-10-01). Triage decides.
+topics:
+  - machine-learning
+  - deep-learning
+  - data-science
+  - llm
+  - nlp
+  - pandas
+  - data-analysis
+  - computer-vision
+  - mlops
+  - data-visualization
+
+shapes:
+  - "bug report with steps to reproduce and a traceback, wrong result or exception"
+  - "regression after upgrading a dependency, error message included"
+  - "good first issue small fix, maintainers welcome contributions"
+  - "help wanted documented expected vs actual behaviour"
+  - "documentation is wrong or missing an example, small clear fix"
+  - "small feature request with a clear proposed API, maintainer agreed"
+
+verify:
+  repo_pushed_within_days: 60
+  issue_updated_within_days: 180
+  claim_hard_days: 14            # a claim comment newer than this drops the issue
+  claim_window_days: 30          # older claims inside this window are flagged for the model
+  min_stars: 200
+  max_stars: 30000
+  skip_labels: [wontfix, duplicate, invalid, question, discussion, "needs design", "needs decision", blocked, stale, "on hold"]

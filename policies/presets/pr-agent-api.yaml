@@ -1,0 +1,37 @@
+# Egress for the pr-agent CLI: the GitHub REST API and the Firecrawl Developer Index.
+# Apply with: nemohermes <sandbox> policy add --from-file policies/presets/pr-agent-api.yaml --yes
+# The provider profiles in policies/provider-profiles/ inject the keys; they don't open the
+# endpoints themselves, so this preset does. Only the agent's private interpreter
+# (made by scripts/deploy.sh) may reach them, so other people's test suites can't.
+
+preset:
+  name: pr-agent-api
+  description: "GitHub REST API and Firecrawl Developer Index for the pr-agent CLI"
+
+network_policies:
+  pr_agent_github_api:
+    name: pr_agent_github_api
+    endpoints:
+      - host: api.github.com
+        port: 443
+        protocol: rest
+        enforcement: enforce
+        rules:
+          - allow: { method: GET, path: "/**" }
+          - allow: { method: POST, path: "/repos/**" }
+          - allow: { method: PATCH, path: "/repos/**" }
+    binaries:
+      - { path: /sandbox/.pr-agent/bin/python }
+  pr_agent_firecrawl:
+    name: pr_agent_firecrawl
+    endpoints:
+      - host: api.firecrawl.dev
+        port: 443
+        protocol: rest
+        enforcement: enforce
+        rules:
+          - allow: { method: POST, path: "/v2/search/developer" }
+          - allow: { method: GET, path: "/v2/search/developer" }
+          - allow: { method: GET, path: "/v2/team/credit-usage" }
+    binaries:
+      - { path: /sandbox/.pr-agent/bin/python }

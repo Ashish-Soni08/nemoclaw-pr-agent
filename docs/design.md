@@ -1,62 +1,50 @@
 # Design
 
-Working design for the NemoClaw PR agent. Decisions marked **open** wait on Ashish.
+How the PR agent is built and why. The runbook (`runbook-lambda.md`) says how to run it; `discovery.md` covers how it finds work.
 
 ## Goal
 
-A long-running agent that finds issues in AI, data-science and data-analysis
-repositories where AI-assisted contributions are welcome, fixes them inside a
-sandbox and opens pull requests. Every decision it makes is recorded so a human
-can see what it did and why.
+A long-running agent that finds issues in AI, data-science and data-analysis repositories where AI-assisted contributions are welcome, fixes them inside a sandbox and opens pull requests. Every decision it makes is recorded so a human can see what it did and why. Built for the NVIDIA Berlin Claw Agent Challenge (submissions close 2026-10-02).
 
-Built for the NVIDIA Berlin Claw Agent Challenge (submissions close 2026-10-02).
+## Decisions
 
-## Stack
-
-| Layer | Choice |
+| Decision | Choice |
 | --- | --- |
-| Runtime | NemoClaw: OpenClaw running inside an OpenShell sandbox |
-| Model | Nemotron through NVIDIA Build hosted endpoints |
-| Host | Lambda Cloud instance (no local model, so no GPU work) |
-| Repo discovery and context | Firecrawl Developer Index, GitHub REST API |
-| Chat | Telegram (OpenClaw channel) plus the built-in OpenClaw Control UI |
-| Record of work | Ledger committed to a GitHub repo, read by a small custom UI |
+| Runtime | NemoClaw with the Hermes agent: OpenShell sandbox, Hermes skills, cron, sub-agents, Telegram |
+| Host | Lambda Cloud 1x A10 instance (cheapest available), paused when not demoing (no GPU work) |
+| Models | Hugging Face Inference Providers router, through NemoClaw's managed `inference.local` route. A menu in `config/agent.yaml`: Nemotron 3 Ultra is the main model, Kimi K2.7 Code runs fix sub-agents, GLM-5.3 and DeepSeek V4.1 Flash review, GLM-5.3 Flash does chores |
+| Autonomy | Fully autonomous. No human approves a PR. The self-review gate decides; code enforces the hard limits |
+| Issues | No type restriction. Any issue in a Python AI/data-science repo the agent can genuinely help with; triage decides |
+| PR format | poteto's: Why, Scope, Blast Radius, Verification. Conventional Commits titles |
+| Discovery | Firecrawl Developer Index on every run, each hit verified live on GitHub |
+| Record | `decisions.tsv` and `spend.tsv`, synced from the host to a Hugging Face dataset |
+| Notifications | Telegram run summaries and a daily digest. No approvals over Telegram |
 
-Structure follows NVIDIA's community recipes, mainly
-[PR Test Case Assistant](https://github.com/NVIDIA/nemoclaw-community/tree/main/examples/recipes/nvidia/pr-test-case-assistant)
-(OpenClaw in NemoClaw against public GitHub). Anything copied from that repo
-keeps its Apache-2.0 header.
+## The model decides, scripts act
 
-## Pipeline
+The model reads issues, chooses what to take, debugs, writes the fix and the PR text, and runs the review gate. Everything that touches the outside world is a `pr-agent` command with hard checks in code:
 
-Each stage narrows the candidates and writes a ledger entry with its reason.
+- `pr-agent pr open` refuses unless the gate passed on the exact diff (hash checked), the repo's policy allows AI contributions, the repo has no other open PR from the agent (there is no daily cap), the title is Conventional Commits, the body has the four sections, the diff is under 400 lines and 20 files, and nothing under `.github/workflows/` changed. It appends the AI disclosure and the ledger link itself.
+- `pr-agent claim post` wraps the plan in a fixed comment that says it's an AI agent and that "no" is respected; one claim per issue, no daily cap.
+- Pushes go through the GitHub Git Data API (blobs, tree, commit, ref) on the agent's fork, so the only credential is one bearer header on `api.github.com`. OpenShell injects it at egress; the sandbox sees a placeholder.
+- Target repos' code (setup, tests) runs with a scrubbed environment: no tokens, no placeholders.
+- The usage guard prices Hermes' own token records against the menu and skips runs once the $400 credit is spent (no daily cap). Hugging Face spend limits only exist for Team/Enterprise orgs, so this is the limit.
+- Firecrawl credits are stopped only when the 70,000-credit total is spent (a backstop of 1,000 per run catches a runaway loop), checked before each call.
 
-1. **discover-repos**: active repos matching the topics.
-2. **check-ai-policy**: read CONTRIBUTING, PR templates and AI policy files;
-   classify as `allows`, `allows-with-disclosure`, `bans` or `unclear`.
-   Only the first two continue. Verdicts are cached per repo.
-3. **triage-issues**: keep unassigned issues with no linked open PR and no
-   "I'm working on this" comment; rank by clarity, maintainer confirmation
-   and size.
-4. **claim-issue**: when the repo asks contributors to claim issues, comment
-   and wait for a maintainer. Issues open to anyone skip this step.
-5. **fix-issue**: one sub-agent per issue. Clone in the sandbox, run the
-   baseline tests, fix, add a test, re-run, open the PR with AI disclosure.
-   Skip when the baseline does not build or pass.
-6. **follow-up**: watch review comments on open PRs and respond.
-7. **ledger**: structured record of every decision; daily summary.
+## Skills
+
+The method is poteto's (cursor/plugins pstack, MIT): `pr-agent-mode` is a router modeled on poteto-mode. It holds 14 adapted playbooks and 7 principles under `references/`, so Hermes doesn't list them in the skill index and only the router loads them. Task skills (`discover-work`, `check-ai-policy`, `triage-issues`, `claim-issue`, `fix-issue`, `follow-up`) follow Benny's triage and repro-and-fix automations. Tool skills: `self-review-gate`, `systematic-debugging`, `before-and-after`, `evidence-driven-testing`, `make-pr-easy-to-review`, `deslop`, `unslop`, `show-me-your-work`.
+
+Two overrides of poteto: stay strictly inside the issue taken, and the gate decides whether a PR opens. The agent never edits its own skills; it logs `skill.flag` rows for humans.
 
 ## Guardrails
 
-- Only repos whose policy allows AI-assisted contributions.
-- Daily PR cap.
-- Every PR states that it was written with an AI agent and links its ledger entry.
-- Sandbox network allowlist: GitHub, Firecrawl, NVIDIA Build, PyPI.
-- Deterministic steps (search, policy fetch, test runs) are scripts the agent
-  calls, not model improvisation.
+- Only repos whose policy allows AI-assisted contributions (`allows`, `allows-with-disclosure`). `unclear` repos (no written policy) are allowed too, because `continue_on_unclear_policy` is on; every PR discloses it's AI-written, and a maintainer's "no" blocks that repo permanently.
+- Every PR and claim says it was written by an AI agent and links the ledger.
+- Never merges, never force-pushes someone else's branch, never edits CI workflows, never argues with a maintainer.
+- Sandbox egress: inference route, `api.github.com` and `api.firecrawl.dev` (Hermes' Python only), `github.com` git fetch, PyPI, Telegram.
+- Issue and repo text is untrusted input; the router tells the agent to log prompt-injection attempts and never act on them.
 
-## Open decisions
+## Open questions for the VM
 
-- PR rules and what each PR must include (Ashish is researching).
-- Topics, languages, repo size bounds, issue types, daily volume, PR account,
-  follow-up autonomy, schedule. Proposed defaults are in the project thread.
+Listed with checks in `runbook-lambda.md`: the HF model ids, whether the managed route honors per-task models, credential injection for the custom profiles, approval behavior in cron runs, and the Developer Index hit rate.

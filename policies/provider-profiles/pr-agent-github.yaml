@@ -1,0 +1,29 @@
+# Credential injection for api.github.com. The sandbox only ever sees a placeholder in
+# PRAGENT_GITHUB_TOKEN; OpenShell swaps in the real fine-grained token at egress.
+# Modeled on NemoClaw's tavily-hermes-v1 profile (Apache-2.0).
+id: pr-agent-github-v1
+display_name: GitHub API for the PR agent
+description: Fine-grained GitHub token for forking, pushing through the Git Data API, opening PRs and commenting
+category: agent
+credentials:
+  - name: token
+    description: GitHub fine-grained personal access token for the agent's account
+    env_vars:
+      - PRAGENT_GITHUB_TOKEN
+    required: true
+    auth_style: bearer
+    header_name: authorization
+    query_param: ''
+endpoints:
+  - host: api.github.com
+    port: 443
+    protocol: rest
+    enforcement: enforce
+    rules:
+      - allow: { method: GET, path: "/**" }
+      - allow: { method: POST, path: "/repos/**" }
+      - allow: { method: PATCH, path: "/repos/**" }
+binaries:
+  - /sandbox/.pr-agent/bin/python
+  - /opt/hermes/.venv/bin/python
+inference_capable: false

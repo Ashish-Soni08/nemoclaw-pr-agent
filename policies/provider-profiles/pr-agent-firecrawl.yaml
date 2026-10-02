@@ -1,0 +1,29 @@
+# Credential injection for the Firecrawl Developer Index. The sandbox sees a placeholder
+# in PRAGENT_FIRECRAWL_KEY. Named PRAGENT_* because Hermes strips FIRECRAWL_API_KEY from
+# terminal commands.
+id: pr-agent-firecrawl-v1
+display_name: Firecrawl Developer Index for the PR agent
+description: Firecrawl API key for /v2/search/developer and credit usage
+category: agent
+credentials:
+  - name: api_key
+    description: Firecrawl API key
+    env_vars:
+      - PRAGENT_FIRECRAWL_KEY
+    required: true
+    auth_style: bearer
+    header_name: authorization
+    query_param: ''
+endpoints:
+  - host: api.firecrawl.dev
+    port: 443
+    protocol: rest
+    enforcement: enforce
+    rules:
+      - allow: { method: POST, path: "/v2/search/developer" }
+      - allow: { method: GET, path: "/v2/search/developer" }
+      - allow: { method: GET, path: "/v2/team/credit-usage" }
+binaries:
+  - /sandbox/.pr-agent/bin/python
+  - /opt/hermes/.venv/bin/python
+inference_capable: false

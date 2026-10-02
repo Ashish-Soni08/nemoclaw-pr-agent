@@ -1,0 +1,100 @@
+# PR agent settings. Secrets never go here: see docs/runbook-lambda.md.
+
+# Hard caps, enforced in code (src/pr_agent/publish.py), not in prompts.
+limits:
+  max_fixes_per_run: 2          # issues the main agent hands to fix sub-agents per run
+  max_prs_per_day: 0            # 0 = no daily cap (Ashish, 2026-10-01); one open PR per repo is the limit
+  max_open_prs_per_repo: 1      # never more than one open PR per repository
+  max_claims_per_day: 0         # "ask first" comments; 0 = no daily cap, one claim per issue
+  max_diff_lines: 400           # added + removed lines
+  max_files: 20
+
+open_as_draft: false            # poteto: open PRs ready for review
+claim_expire_days: 7
+
+# `allows` and `allows-with-disclosure` always continue; `bans` never does.
+# Most repos have no written AI policy, so this switch decides throughput.
+# Ashish chose true on 2026-10-01: every PR and claim still says it's AI-written,
+# and a maintainer's "no" blocks the repo for good (`pr-agent policy <repo> --block`).
+continue_on_unclear_policy: true
+
+ledger:
+  hf_dataset: ""                # Hugging Face dataset repo, e.g. ashish-soni08/pr-agent-ledger (or set LEDGER_DATASET)
+  public_url: ""                # link printed in every PR footer; only set it if the dataset is public
+
+# Model spend guard (src/pr_agent/usage.py). Prices are USD per 1M tokens and
+# are ESTIMATES: update them from the Hugging Face Inference Providers pricing
+# page before the first run. Unknown models are priced at the most expensive entry.
+usage:
+  monthly_budget_usd: 400       # Ashish's Hugging Face credit (2026-10-01); runs stop only when it's spent
+  daily_budget_usd: 0           # 0 = no daily cap (Ashish, 2026-10-01: don't hold the agent back)
+
+router_url: https://router.huggingface.co/v1
+
+# The approved menu. Hermes uses `main` for cron runs, `fix` for delegated
+# fix sub-agents (delegation.model), `fast` for auxiliary chores. Run
+# `pr-agent models` on the host to confirm each id is served by the router.
+models:
+  # Ashish's picks (2026-10-02). Prices are the cheapest live provider per 1M tokens
+  # from `pr-agent models` on 2026-10-02; all served with tool calls.
+  - id: nvidia/NVIDIA-Nemotron-3-Ultra-550B-A55B-NVFP4
+    roles: [candidate]
+    price_in: 0.6
+    price_out: 2.4
+    note: was main; NemoClaw onboarding got HTTP 400 on Chat Completions (Responses API worked), 2026-10-02
+  - id: zai-org/GLM-5.3
+    roles: [main, review]
+    price_in: 0.9
+    price_out: 4.0
+    note: main model (Ultra failed onboarding); triage, delegation, gate synthesis, PR text
+  - id: moonshotai/Kimi-K2.7-Code
+    roles: [fix]
+    price_in: 0.68
+    price_out: 3.4
+    note: fix sub-agents; code and tool use
+  - id: Qwen/Qwen3-Coder-480B-A35B-Instruct
+    roles: [fix-backup]
+    price_in: 0.38
+    price_out: 1.55
+    note: backup fix model
+  - id: deepseek-ai/DeepSeek-V4.1-Flash
+    roles: [review]
+    price_in: 0.2
+    price_out: 0.6
+    note: independent review pass (different family from the fix model)
+  - id: zai-org/GLM-5.3-Flash
+    roles: [fast]
+    price_in: 0.15
+    price_out: 0.5
+    note: auxiliary chores (compression, titles)
+  - id: moonshotai/Kimi-K3
+    roles: [candidate]
+    price_in: 2.7
+    price_out: 13.5
+    note: candidate; checked by `pr-agent models`
+  - id: MiniMaxAI/MiniMax-M3
+    roles: [candidate]
+    price_in: 0.28
+    price_out: 1.1
+    note: candidate
+  - id: XiaomiMiMo/MiMo-V2.6-Pro-RL
+    roles: [candidate]
+    price_in: 0.435
+    price_out: 0.87
+    note: candidate
+  - id: Qwen/Qwen3.8-2.4T-A95B
+    roles: [candidate]
+    price_in: 2.0
+    price_out: 6.0
+    note: candidate
+  - id: thinkingmachines/Inkling
+    roles: [candidate]
+    price_in: 0.95
+    price_out: 4.05
+    note: candidate
+
+# Spend snapshots (ledger/spend.tsv) for the UI: one row per provider per run.
+spend:
+  firecrawl_plan_credits: 70000 # Ashish's Firecrawl credit (2026-10-01)
+  lambda_hourly_usd: 1.29       # 1x A10 on-demand (no V100 available on 2026-10-01)
+  lambda_credit_usd: 500        # Ashish's Lambda credit (2026-10-01)

@@ -1,0 +1,140 @@
+"""GitHub REST calls. Every write goes through api.github.com, including the push.
+
+Pushing with the Git Data API (blobs, tree, commit, ref) instead of `git push`
+means the only credential is one bearer header on api.github.com. Inside the
+NemoClaw sandbox that header holds a placeholder that OpenShell swaps for the
+real token at egress, so the model never sees the token.
+"""
+
+from __future__ import annotations
+
+import base64
+import time
+from dataclasses import dataclass, field
+from typing import Any, Callable
+
+from .http import Client, HttpError
+
+API = "https://api.github.com"
+
+
+@dataclass
+class GitHub:
+    client: Client
+    sleep: Callable[[float], None] = time.sleep
+    _repo_cache: dict[str, dict[str, Any]] = field(default_factory=dict)
+    _login: str | None = None
+
+    @classmethod
+    def create(cls, token: str) -> "GitHub":
+        headers = {"Accept": "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28", "User-Agent": "nemoclaw-pr-agent"}
+        if token:
+            headers["Authorization"] = f"Bearer {token}"
+        return cls(Client(API, headers=headers))
+
+    # Reads
+
+    def login(self) -> str:
+        if self._login is None:
+            self._login = self.client.get_json("/user")["login"]
+        return self._login
+
+    def repo(self, full: str) -> dict[str, Any]:
+        if full not in self._repo_cache:
+            self._repo_cache[full] = self.client.get_json(f"/repos/{full}")
+        return self._repo_cache[full]
+
+    def issue(self, full: str, number: int) -> dict[str, Any]:
+        return self.client.get_json(f"/repos/{full}/issues/{number}")
+
+    def timeline(self, full: str, number: int) -> list[dict[str, Any]]:
+        return self.client.get_json(f"/repos/{full}/issues/{number}/timeline?per_page=100")
+
+    def comments(self, full: str, number: int, since: str | None = None) -> list[dict[str, Any]]:
+        q = f"?per_page=100&since={since}" if since else "?per_page=100"
+        return self.client.get_json(f"/repos/{full}/issues/{number}/comments{q}")
+
+    def file_text(self, full: str, path: str, ref: str | None = None) -> str | None:
+        q = f"?ref={ref}" if ref else ""
+        resp = self.client.request("GET", f"/repos/{full}/contents/{path}{q}")
+        if resp.status == 404:
+            return None
+        if not resp.ok:
+            raise HttpError(resp, path)
+        data = resp.json()
+        if isinstance(data, list) or data.get("encoding") != "base64":
+            return None
+        return base64.b64decode(data["content"]).decode("utf-8", "replace")
+
+    def list_dir(self, full: str, path: str) -> list[str]:
+        resp = self.client.request("GET", f"/repos/{full}/contents/{path}")
+        if not resp.ok:
+            return []
+        data = resp.json()
+        return [item["path"] for item in data] if isinstance(data, list) else []
+
+    def search_issues(self, q: str, per_page: int = 50) -> list[dict[str, Any]]:
+        from urllib.parse import quote
+
+        return self.client.get_json(f"/search/issues?q={quote(q)}&per_page={per_page}").get("items", [])
+
+    def pr_review_comments(self, full: str, number: int) -> list[dict[str, Any]]:
+        return self.client.get_json(f"/repos/{full}/pulls/{number}/comments?per_page=100")
+
+    def pr(self, full: str, number: int) -> dict[str, Any]:
+        return self.client.get_json(f"/repos/{full}/pulls/{number}")
+
+    # Writes
+
+    def _post(self, path: str, body: dict[str, Any], method: str = "POST") -> dict[str, Any]:
+        resp = self.client.request(method, path, body)
+        if not resp.ok:
+            raise HttpError(resp, path)
+        return resp.json()
+
+    def ensure_fork(self, upstream: str, wait_s: float = 60) -> str:
+        """Fork once; reuse it on later runs. Returns `login/name`."""
+        name = upstream.split("/")[1]
+        fork = f"{self.login()}/{name}"
+        resp = self.client.request("GET", f"/repos/{fork}")
+        if resp.ok and resp.json().get("fork") and (resp.json().get("parent") or {}).get("full_name") == upstream:
+            return fork
+        created = self._post(f"/repos/{upstream}/forks", {"default_branch_only": True})
+        fork = created["full_name"]
+        deadline = time.monotonic() + wait_s
+        while time.monotonic() < deadline:
+            if self.client.request("GET", f"/repos/{fork}/git/ref/heads/{created['default_branch']}").ok:
+                return fork
+            self.sleep(3)
+        raise RuntimeError(f"fork {fork} not ready after {wait_s}s")
+
+    def sync_fork(self, fork: str, branch: str) -> None:
+        self.client.request("POST", f"/repos/{fork}/merge-upstream", {"branch": branch})
+
+    def push_files(self, repo: str, branch: str, base_sha: str, changes: dict[str, bytes | None], message: str) -> str:
+        """Commit `changes` on top of `base_sha` and point `branch` at it. None deletes a path."""
+        base_commit = self.client.get_json(f"/repos/{repo}/git/commits/{base_sha}")
+        tree = []
+        for path, content in sorted(changes.items()):
+            if content is None:
+                tree.append({"path": path, "mode": "100644", "type": "blob", "sha": None})
+                continue
+            blob = self._post(f"/repos/{repo}/git/blobs", {"content": base64.b64encode(content).decode(), "encoding": "base64"})
+            tree.append({"path": path, "mode": "100644", "type": "blob", "sha": blob["sha"]})
+        new_tree = self._post(f"/repos/{repo}/git/trees", {"base_tree": base_commit["tree"]["sha"], "tree": tree})
+        commit = self._post(f"/repos/{repo}/git/commits", {"message": message, "tree": new_tree["sha"], "parents": [base_sha]})
+        ref = self.client.request("GET", f"/repos/{repo}/git/ref/heads/{branch}")
+        if ref.ok:
+            self._post(f"/repos/{repo}/git/refs/heads/{branch}", {"sha": commit["sha"], "force": True}, method="PATCH")
+        else:
+            self._post(f"/repos/{repo}/git/refs", {"ref": f"refs/heads/{branch}", "sha": commit["sha"]})
+        return commit["sha"]
+
+    def open_pr(self, upstream: str, head: str, base: str, title: str, body: str, draft: bool) -> dict[str, Any]:
+        return self._post(f"/repos/{upstream}/pulls", {"title": title, "head": head, "base": base, "body": body, "draft": draft, "maintainer_can_modify": True})
+
+    def comment(self, full: str, number: int, body: str) -> dict[str, Any]:
+        return self._post(f"/repos/{full}/issues/{number}/comments", {"body": body})
+
+    def reply_review_comment(self, full: str, pr_number: int, comment_id: int, body: str) -> dict[str, Any]:
+        return self._post(f"/repos/{full}/pulls/{pr_number}/comments/{comment_id}/replies", {"body": body})
