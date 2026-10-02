@@ -94,8 +94,7 @@ A usage guard prices every run against this menu and stops the agent once the mo
 
 ## Demo video
 
-<!-- Replace with the new video link once it is uploaded. -->
-[Watch the demo](docs/media/demo.mp4)
+[Watch the demo (about 90 s)](docs/media/demo.mp4): the agent's real first day, from issue discovery to the plan posted on NVIDIA-NeMo/Gym#2236.
 
 To run it yourself, follow [docs/runbook-lambda.md](docs/runbook-lambda.md): `scripts/install.sh`, `scripts/setup-credentials.sh`, `scripts/deploy.sh`, `scripts/run-now.sh`.
 
