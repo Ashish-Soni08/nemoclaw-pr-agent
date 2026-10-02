@@ -3,7 +3,7 @@
 # (rebuilds regenerate config.yaml). Model ids come from config/agent.yaml's menu.
 set -euo pipefail
 
-FIX_MODEL="${PR_AGENT_FIX_MODEL:-Qwen/Qwen3.5-397B-A17B}"
+FIX_MODEL="${PR_AGENT_FIX_MODEL:-moonshotai/Kimi-K2.7-Code}"
 
 # Fix sub-agents run on the `fix` model through the same managed inference route.
 hermes config set delegation.model "$FIX_MODEL"

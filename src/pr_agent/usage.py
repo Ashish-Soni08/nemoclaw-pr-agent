@@ -95,7 +95,19 @@ def report(state_db: Path, entries: list[ModelEntry], month_budget: float, day_b
     return UsageReport(round(month, 4), round(day, 4), by_model, sorted(unknown), month_budget, day_budget)
 
 
-def served_models(base_url: str, token: str) -> set[str]:
-    """Which ids the router serves right now (host-side check, needs HF_TOKEN)."""
+def router_models(base_url: str, token: str) -> dict[str, dict[str, Any]]:
+    """What the router serves right now (host-side check, needs HF_TOKEN): id -> cheapest live
+    provider's price per 1M tokens, whether any provider supports tool calls, and the longest context."""
     data = Client(base_url, headers={"Authorization": f"Bearer {token}"}).get_json("/models")
-    return {m["id"] for m in data.get("data", [])}
+    out: dict[str, dict[str, Any]] = {}
+    for m in data.get("data", []):
+        live = [p for p in m.get("providers") or [] if p.get("status", "live") == "live"]
+        priced = [p for p in live if (p.get("pricing") or {}).get("input") is not None]
+        cheapest = min(priced, key=lambda p: p["pricing"]["input"] + p["pricing"].get("output", 0), default=None)
+        out[m["id"]] = {
+            "price_in": cheapest["pricing"]["input"] if cheapest else None,
+            "price_out": cheapest["pricing"].get("output") if cheapest else None,
+            "tools": any(p.get("supports_tools") for p in live) if live else None,
+            "context": max((p.get("context_length") or 0 for p in live), default=0) or None,
+        }
+    return out

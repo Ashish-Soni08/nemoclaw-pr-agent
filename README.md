@@ -13,7 +13,7 @@ Hermes cron (every 4h, inside the NemoClaw sandbox)
     discover-work        -> Firecrawl Developer Index, 5-6 queries, credit-capped
                             -> live GitHub checks: open, unassigned, nobody on it, not already fixed
     check-ai-policy      -> CONTRIBUTING / AI policy / maintainer discussion; bans are final
-  agent (Nemotron 3 Super via the Hugging Face router)
+  agent (Nemotron 3 Ultra via the Hugging Face router)
     pr-agent-mode router -> triage-issues: take or skip, with a reason, for every candidate
                          -> ask-first lane: claim-issue (comment a plan, wait for a maintainer)
                          -> go-directly lane: fix sub-agent (fix-issue + poteto playbooks)

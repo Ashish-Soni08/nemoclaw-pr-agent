@@ -21,7 +21,7 @@ from .publish import Refused, Registry, ack_comments, check_changes, claim_updat
 from .state import CreditBook, SeenStore, read_json, write_json
 from .spend import snapshot as spend_snapshot
 from .summary import compact_candidates, daily_digest, run_summary
-from .usage import menu, report, served_models
+from .usage import menu, report, router_models
 from .workspace import Meta, diff_hash, diff_text, prepare, run_tests, setup_env
 
 
@@ -343,8 +343,11 @@ def dispatch(app: App, a: argparse.Namespace) -> int:  # noqa: C901 - flat comma
         g = app.guard()
         out(g.__dict__ | {"over": g.over})
     elif a.cmd == "models":
-        served = served_models(app.s.agent.get("router_url", "https://router.huggingface.co/v1"), secret("HF_TOKEN"))
-        rows = [{"id": m.id, "roles": m.roles, "served": any(s == m.id or s.startswith(m.id + ":") for s in served)} for m in menu(app.s.agent)]
+        live = router_models(app.s.agent.get("router_url", "https://router.huggingface.co/v1"), secret("HF_TOKEN"))
+        rows = []
+        for m in menu(app.s.agent):
+            hit = next((v for k, v in live.items() if k == m.id or k.startswith(m.id + ":")), None)
+            rows.append({"id": m.id, "roles": m.roles, "served": hit is not None, **(hit or {})})
         out(rows)
         return 0 if all(r["served"] for r in rows) else 1
     elif a.cmd == "ledger":

@@ -38,11 +38,11 @@ export TELEGRAM_BOT_TOKEN=... TELEGRAM_ALLOWED_IDS=...
 scripts/install.sh
 ```
 
-This onboards a sandbox called `pr-agent` with Nemotron 3 Super as the main model, served through `router.huggingface.co` as an OpenAI-compatible endpoint. The HF token goes to the OpenShell gateway; the sandbox talks to `inference.local` and never sees it.
+This onboards a sandbox called `pr-agent` with Nemotron 3 Ultra as the main model, served through `router.huggingface.co` as an OpenAI-compatible endpoint. The HF token goes to the OpenShell gateway; the sandbox talks to `inference.local` and never sees it.
 
-**VERIFY (model id).** Before installing, check the router serves the menu: `sudo apt-get install -y python3-yaml && HF_TOKEN=$HF_TOKEN bin/pr-agent models`. Every row should say `"served": true`. If the Super id isn't served, pick the served Nemotron id from `curl -s -H "Authorization: Bearer $HF_TOKEN" https://router.huggingface.co/v1/models | python3 -m json.tool | grep -i nemotron`, put it in `config/agent.yaml`, and export `PR_AGENT_MAIN_MODEL=<id>` before `install.sh`.
+**VERIFY (model id).** Before installing, check the router serves the menu: `sudo apt-get install -y python3-yaml && HF_TOKEN=$HF_TOKEN bin/pr-agent models`. The main, fix, review and fast rows should say `"served": true`; `candidate` rows are just checked (drop the ones that aren't served, and copy live prices into the menu). If the Ultra id isn't served, use the backup main (GLM-5.3) or another served id from `curl -s -H "Authorization: Bearer $HF_TOKEN" https://router.huggingface.co/v1/models | python3 -m json.tool | grep -i nemotron`, put it in `config/agent.yaml`, and export `PR_AGENT_MAIN_MODEL=<id>` before `install.sh`.
 
-**VERIFY (per-task models).** Fix sub-agents use `delegation.model` (Qwen3.5 by default). If NemoClaw's managed route pins every request to the onboarded model, sub-agents silently run on Super too. Check after the first run with `nemohermes pr-agent exec -- sqlite3 /sandbox/.hermes/state.db "select model, count(*) from sessions group by 1"`. Either outcome works; the usage guard prices whatever ran.
+**VERIFY (per-task models).** Fix sub-agents use `delegation.model` (Kimi K2.7 Code by default). If NemoClaw's managed route pins every request to the onboarded model, sub-agents silently run on the main model too. Check after the first run with `nemohermes pr-agent exec -- sqlite3 /sandbox/.hermes/state.db "select model, count(*) from sessions group by 1"`. Either outcome works; the usage guard prices whatever ran.
 
 **Telegram.** Message your bot once, then send `/sethome` in that chat so cron output has a home channel.
 
@@ -121,7 +121,7 @@ curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash
 mkdir -p ~/.pr-agent && chmod 700 ~/.pr-agent
 # ~/.pr-agent/secrets.env, mode 600: GITHUB_TOKEN=... and PRAGENT_FIRECRAWL_KEY=...
 hermes config set model.provider huggingface
-hermes config set model.default nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-FP8
+hermes config set model.default "${PR_AGENT_MAIN_MODEL:-nvidia/NVIDIA-Nemotron-3-Ultra-550B-A55B-NVFP4}"
 # HF_TOKEN, TELEGRAM_BOT_TOKEN, TELEGRAM_ALLOWED_USERS in ~/.hermes/.env
 cp -r skills/* ~/.hermes/skills/ && cp hermes/SOUL.md ~/.hermes/SOUL.md
 mkdir -p ~/.local/bin && ln -sf $PWD/bin/pr-agent ~/.local/bin/pr-agent
