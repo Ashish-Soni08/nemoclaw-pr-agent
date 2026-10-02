@@ -28,7 +28,9 @@ nemohermes "$SANDBOX" exec -- bash "$SANDBOX_REPO/hermes/apply-config.sh"
 # Summaries go to Telegram only once the channel is set up (install.sh with TELEGRAM_BOT_TOKEN);
 # a job whose delivery target isn't connected refuses to run, so the default is local.
 nemohermes "$SANDBOX" exec -- env PR_AGENT_DELIVER="${PR_AGENT_DELIVER:-local}" bash "$SANDBOX_REPO/hermes/register-jobs.sh"
-nemohermes "$SANDBOX" gateway restart
+# The restart's health check can give up before Telegram finishes connecting (~10 s);
+# the gateway still comes up, so fall back to a status check instead of failing the deploy.
+nemohermes "$SANDBOX" gateway restart || { sleep 15; nemohermes "$SANDBOX" status; }
 
 say "Smoke test inside the sandbox"
 nemohermes "$SANDBOX" exec -- "$SANDBOX_REPO/bin/pr-agent" guard
