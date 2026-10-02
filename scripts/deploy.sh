@@ -25,7 +25,9 @@ nemohermes "$SANDBOX" skill list
 say "SOUL.md, Hermes settings, cron jobs"
 nemohermes "$SANDBOX" exec -- cp "$SANDBOX_REPO/hermes/SOUL.md" /sandbox/.hermes/SOUL.md
 nemohermes "$SANDBOX" exec -- bash "$SANDBOX_REPO/hermes/apply-config.sh"
-nemohermes "$SANDBOX" exec -- bash "$SANDBOX_REPO/hermes/register-jobs.sh"
+# Summaries go to Telegram only once the channel is set up (install.sh with TELEGRAM_BOT_TOKEN);
+# a job whose delivery target isn't connected refuses to run, so the default is local.
+nemohermes "$SANDBOX" exec -- env PR_AGENT_DELIVER="${PR_AGENT_DELIVER:-local}" bash "$SANDBOX_REPO/hermes/register-jobs.sh"
 nemohermes "$SANDBOX" gateway restart
 
 say "Smoke test inside the sandbox"

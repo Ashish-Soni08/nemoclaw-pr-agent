@@ -44,7 +44,7 @@ This onboards a sandbox called `pr-agent` with Nemotron 3 Ultra as the main mode
 
 **VERIFY (per-task models).** Fix sub-agents use `delegation.model` (Kimi K2.7 Code by default). If NemoClaw's managed route pins every request to the onboarded model, sub-agents silently run on the main model too. Check after the first run with `nemohermes pr-agent exec -- sqlite3 /sandbox/.hermes/state.db "select model, count(*) from sessions group by 1"`. Either outcome works; the usage guard prices whatever ran.
 
-**Telegram.** Message your bot once, then send `/sethome` in that chat so cron output has a home channel.
+**Telegram.** Message your bot once, then send `/sethome` in that chat so cron output has a home channel. Then deploy with `PR_AGENT_DELIVER=telegram scripts/deploy.sh`. Without Telegram, deploy registers the jobs with `deliver=local` (a job whose delivery target isn't connected refuses to run: `blocked_config`).
 
 ## 3. Register the GitHub and Firecrawl keys
 
