@@ -3,8 +3,14 @@
 # (it has PyYAML, and it is the binary the sandbox egress policies allow).
 set -euo pipefail
 REPO="${PR_AGENT_REPO:-$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)}"
-PY="${PR_AGENT_PYTHON:-/opt/hermes/.venv/bin/python}"
-[[ -x "$PY" ]] || PY="$(command -v python3)"
+# In the sandbox, deploy.sh puts a private copy of python3 at /sandbox/.pr-agent/bin/python.
+# The GitHub and Firecrawl keys are injected only for that path, so other people's test
+# suites (venvs built from /usr/bin/python3) never get them.
+PY="${PR_AGENT_PYTHON:-}"
+for cand in /sandbox/.pr-agent/bin/python /opt/hermes/.venv/bin/python; do
+  [[ -z "$PY" && -x "$cand" ]] && PY="$cand"
+done
+[[ -n "$PY" ]] || PY="$(command -v python3)"
 export PR_AGENT_REPO="$REPO"
 export PYTHONPATH="$REPO/src${PYTHONPATH:+:$PYTHONPATH}"
 exec "$PY" -m pr_agent.cli "$@"

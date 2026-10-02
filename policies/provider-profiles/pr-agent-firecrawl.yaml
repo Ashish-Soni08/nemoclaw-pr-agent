@@ -24,5 +24,6 @@ endpoints:
       - allow: { method: GET, path: "/v2/search/developer" }
       - allow: { method: GET, path: "/v2/team/credit-usage" }
 binaries:
+  - /sandbox/.pr-agent/bin/python
   - /opt/hermes/.venv/bin/python
 inference_capable: false

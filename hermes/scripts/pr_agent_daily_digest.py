@@ -4,8 +4,8 @@ import os
 import sys
 
 _default = "/sandbox/nemoclaw-pr-agent" if os.path.isdir("/sandbox/nemoclaw-pr-agent") else os.path.expanduser("~/nemoclaw-pr-agent")
-sys.path.insert(0, os.path.join(os.environ.get("PR_AGENT_REPO", _default), "src"))
-
-from pr_agent.cli import main  # noqa: E402
-
-sys.exit(main(["summary", "daily"]))
+_launcher = os.path.join(os.environ.get("PR_AGENT_REPO", _default), "bin", "pr-agent")
+# exec the launcher rather than importing pr_agent here: it picks the interpreter the
+# sandbox injects credentials for, which Hermes' own Python is not.
+sys.stdout.flush()
+os.execv(_launcher, [_launcher, "summary", "daily"])

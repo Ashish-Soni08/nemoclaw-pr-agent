@@ -10,6 +10,9 @@ nemohermes "$SANDBOX" exec -- rm -rf "$SANDBOX_REPO"
 nemohermes "$SANDBOX" upload "$REPO_DIR" /sandbox/
 nemohermes "$SANDBOX" exec -- bash -c "test -x $SANDBOX_REPO/bin/pr-agent && mkdir -p /sandbox/.local/bin && ln -sf $SANDBOX_REPO/bin/pr-agent /sandbox/.local/bin/pr-agent"
 
+say "Private interpreter for pr-agent (the only binary the GitHub and Firecrawl keys are injected for)"
+nemohermes "$SANDBOX" exec -- bash -c 'mkdir -p /sandbox/.pr-agent/bin && cp -f "$(readlink -f "$(command -v python3)")" /sandbox/.pr-agent/bin/python && /sandbox/.pr-agent/bin/python -c "import ssl, yaml; print(\"interpreter ok\")"'
+
 say "Installing skills"
 for dir in "$REPO_DIR"/skills/*/; do
   nemohermes "$SANDBOX" skill install "$dir"
