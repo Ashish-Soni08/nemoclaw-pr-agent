@@ -82,9 +82,9 @@ All models run through the Hugging Face Inference Providers router. Prices are U
 
 | Job | Model | Price | What it does |
 | --- | --- | --- | --- |
-| Main | GLM-5.3 (`zai-org/GLM-5.3`) | 0.90 / 4.00 | Every cron run: triage, sending work to sub-agents, PR text |
-| Fix | Kimi K3 (`moonshotai/Kimi-K3`) | 2.70 / 13.50 | One sub-agent per issue: repro, fix, tests |
-| Fix backup | Qwen3 Coder 480B (`Qwen/Qwen3-Coder-480B-A35B-Instruct`) | 0.38 / 1.55 | Used if Kimi K3 isn't available |
+| Main | GLM-5.3 (`zai-org/GLM-5.3`) | 1.40 / 4.40 (Baseten) | Every cron run: triage, sending work to sub-agents, PR text |
+| Fix | Qwen3 Coder 480B (`Qwen/Qwen3-Coder-480B-A35B-Instruct`) | 0.38 / 1.55 | One sub-agent per issue: repro, fix, tests |
+| Fix backup | Kimi K3 (`moonshotai/Kimi-K3`) | 2.70 / 13.50 | Used if Qwen3 Coder isn't available |
 | Review | DeepSeek V4.1 Flash + GLM-5.3 | 0.20 / 0.60 (DeepSeek) | The two-pass self-review, by a different model family than the fixer |
 | Chores | GLM-5.3 Flash (`zai-org/GLM-5.3-Flash`) | 0.15 / 0.50 | Summarizing context, titles |
 

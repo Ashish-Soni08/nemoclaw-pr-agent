@@ -44,8 +44,10 @@ models:
     note: was main; NemoClaw onboarding got HTTP 400 on Chat Completions (Responses API worked), 2026-10-02
   - id: zai-org/GLM-5.3
     roles: [main, review]
-    price_in: 0.9
-    price_out: 4.0
+    # Priced at Baseten, the provider the router actually used (2026-10-02 test). DeepInfra is 0.9/4.0
+    # but NemoClaw's route drops a :provider pin, so the guard must not assume the cheapest.
+    price_in: 1.4
+    price_out: 4.4
     note: main model (Ultra failed onboarding); triage, delegation, gate synthesis, PR text
   - id: moonshotai/Kimi-K2.7-Code
     roles: [candidate]
@@ -53,10 +55,10 @@ models:
     price_out: 3.4
     note: was the fix model until 2026-10-02 (Ashish switched fix to Kimi K3)
   - id: Qwen/Qwen3-Coder-480B-A35B-Instruct
-    roles: [fix-backup]
+    roles: [fix]
     price_in: 0.38
     price_out: 1.55
-    note: backup fix model
+    note: fix sub-agents (Ashish, 2026-10-02 23:50; only provider Novita)
   - id: deepseek-ai/DeepSeek-V4.1-Flash
     roles: [review]
     price_in: 0.2
@@ -68,10 +70,10 @@ models:
     price_out: 0.5
     note: auxiliary chores (compression, titles)
   - id: moonshotai/Kimi-K3
-    roles: [fix]
+    roles: [fix-backup]
     price_in: 2.7
     price_out: 13.5
-    note: fix sub-agents; code and tool use (Ashish, 2026-10-02)
+    note: backup fix model (Ashish, 2026-10-02 23:50)
   - id: MiniMaxAI/MiniMax-M3
     roles: [candidate]
     price_in: 0.28
