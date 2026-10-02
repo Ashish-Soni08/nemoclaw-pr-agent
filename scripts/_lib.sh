@@ -4,7 +4,7 @@ set -euo pipefail
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SANDBOX="${PR_AGENT_SANDBOX:-pr-agent}"
 export PATH="$HOME/.local/bin:$PATH"   # nemohermes lives here; cron has a bare PATH
-MAIN_MODEL="${PR_AGENT_MAIN_MODEL:-nvidia/NVIDIA-Nemotron-3-Ultra-550B-A55B-NVFP4}"
+MAIN_MODEL="${PR_AGENT_MAIN_MODEL:-zai-org/GLM-5.3}"
 SANDBOX_REPO=/sandbox/nemoclaw-pr-agent
 
 say() { printf '\n==> %s\n' "$*"; }

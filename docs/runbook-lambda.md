@@ -121,7 +121,7 @@ curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash
 mkdir -p ~/.pr-agent && chmod 700 ~/.pr-agent
 # ~/.pr-agent/secrets.env, mode 600: GITHUB_TOKEN=... and PRAGENT_FIRECRAWL_KEY=...
 hermes config set model.provider huggingface
-hermes config set model.default "${PR_AGENT_MAIN_MODEL:-nvidia/NVIDIA-Nemotron-3-Ultra-550B-A55B-NVFP4}"
+hermes config set model.default "${PR_AGENT_MAIN_MODEL:-zai-org/GLM-5.3}"
 # HF_TOKEN, TELEGRAM_BOT_TOKEN, TELEGRAM_ALLOWED_USERS in ~/.hermes/.env
 cp -r skills/* ~/.hermes/skills/ && cp hermes/SOUL.md ~/.hermes/SOUL.md
 mkdir -p ~/.local/bin && ln -sf $PWD/bin/pr-agent ~/.local/bin/pr-agent

@@ -80,3 +80,19 @@ def test_run_summary_reads_only_the_ledger(tmp_path):
     assert "https://github.com/o/a/pull/9" in text
     assert "x/y#1" not in text
     assert "1 open PRs" in text
+
+
+def test_tokens_for_one_run(tmp_path):
+    from pr_agent.spend import append_tokens
+    now = datetime(2026, 10, 15, 12, tzinfo=timezone.utc)
+    db = tmp_path / "state.db"
+    state_db(db, [
+        ("a", "nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-FP8", now.timestamp() - 3600, 5, 5),
+        ("b", "Qwen/Qwen3.5-397B-A17B", now.timestamp() - 60, 1_000_000, 500_000),
+    ])
+    by_model = report(db, MENU, 10, 0, now=now, since=now.timestamp() - 120).by_model
+    out = tmp_path / "ledger" / "tokens.tsv"
+    assert append_tokens(out, "run-1", "pr-agent-run", by_model) == 1
+    header, row = out.read_text().splitlines()
+    assert header.split("\t") == ["ts", "run", "subject", "step", "model", "tokens_in", "tokens_out", "cost_usd"]
+    assert row.split("\t")[1:] == ["run-1", "-", "pr-agent-run", "Qwen/Qwen3.5-397B-A17B", "1000000", "500000", "1.8000"]

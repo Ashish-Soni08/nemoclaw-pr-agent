@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Any
 
 from .devindex import BASE_URL as FIRECRAWL_URL
+from .ledger import append_tsv
 from .http import Client
 from .state import CreditBook, read_json, write_json
 
@@ -94,3 +95,18 @@ def snapshot(state_dir: Path, ledger_dir: Path, cfg: dict[str, Any], hf_month_us
     ]
     append(ledger_dir / "spend.tsv", rows)
     return rows
+
+
+
+TOKEN_COLUMNS = ("ts", "run", "subject", "step", "model", "tokens_in", "tokens_out", "cost_usd")
+
+
+def append_tokens(path: Path, run: str, step: str, by_model: dict[str, dict[str, float]], subject: str = "-") -> int:
+    """ledger/tokens.tsv: one row per (subject, step, model), written at the end of a run.
+
+    Hermes' session records don't say which issue a session worked on, so run-wide rows
+    use subject "-" and the cron job name as the step."""
+    ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    rows = [[ts, run, subject, step, model, str(int(agg["in"])), str(int(agg["out"])), f"{agg['usd']:.4f}"] for model, agg in sorted(by_model.items())]
+    append_tsv(path, TOKEN_COLUMNS, rows)
+    return len(rows)

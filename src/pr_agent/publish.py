@@ -235,8 +235,11 @@ def claim_updates(gh: GitHub, registry: Registry, expire_days: int = 7) -> list[
     return out
 
 
-def pr_updates(gh: GitHub, registry: Registry) -> list[dict[str, Any]]:
-    """New review comments, conversation comments and state changes on our open PRs."""
+def pr_updates(gh: GitHub, registry: Registry, ledger: Ledger | None = None) -> list[dict[str, Any]]:
+    """New review comments, conversation comments and state changes on our open PRs.
+
+    A PR seen merged or closed for the first time gets a pr.outcome row, keyed on the
+    same issue id as its pr.opened row."""
     out = []
     me = gh.login()
     for key, rec in registry.prs().items():
@@ -254,6 +257,10 @@ def pr_updates(gh: GitHub, registry: Registry) -> list[dict[str, Any]]:
                 new.append({"kind": "conversation", "id": c["id"], "author": c["user"]["login"], "body": c["body"][:800], "url": c["html_url"]})
         # Comments stay "new" until the agent answers or acks them, so a crashed run loses nothing.
         registry.save_pr(key, {"state": state, "checked_at": utcnow().isoformat(timespec="seconds")})
+        if state != "open" and ledger is not None:
+            by = (pr.get("merged_by") or {}).get("login") if state == "merged" else ""
+            why = f"merged by {by}" if by else ("merged" if state == "merged" else "closed without merging")
+            ledger.log("pr.outcome", rec.get("issue_id") or key, f"{state} {key}", why, rec["url"], state)
         if new or state != "open":
             out.append({"pr": key, "url": rec["url"], "state": state, "new_comments": new})
     return out

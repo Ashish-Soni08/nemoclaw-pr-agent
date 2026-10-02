@@ -19,9 +19,20 @@ def clean(value: object) -> str:
     """Single-line cell; a leading formula character gets a quote so spreadsheets never execute it."""
     text = str(value if value is not None else "")
     text = text.replace("\t", " ").replace("\r", " ").replace("\n", " ").strip()
-    if text[:1] in ("=", "+", "-", "@"):
+    if len(text) > 1 and text[0] in ("=", "+", "-", "@"):  # a bare "-" means "none" and stays as is
         text = "'" + text
     return text
+
+
+def append_tsv(path: Path, columns: tuple[str, ...], rows: list[list[object]]) -> None:
+    """Append rows to a side table under ledger/, writing the header on first use."""
+    new = not path.exists() or path.stat().st_size == 0
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a", encoding="utf-8") as fh:
+        if new:
+            fh.write("\t".join(columns) + "\n")
+        for row in rows:
+            fh.write("\t".join(clean(c) for c in row) + "\n")
 
 
 def now_iso() -> str:

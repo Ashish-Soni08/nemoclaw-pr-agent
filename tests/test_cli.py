@@ -51,3 +51,15 @@ def test_policy_block_is_logged_and_stored(home, capsys):
     assert "o/r" in json.loads((home / "state" / "policy" / "blocked.json").read_text())
     rows = (home / "ledger" / "decisions.tsv").read_text().splitlines()
     assert rows[-1].split("\t")[2:5] == ["policy.block", "o/r", "stopped working in this repo for good"]
+
+
+def test_run_start_records_run_config(home):
+    from pr_agent.cli import App
+    app = App()
+    run = app.run_start("run")
+    rows = [l.split("\t") for l in (app.s.ledger_dir / "run_config.tsv").read_text().splitlines()]
+    assert rows[0] == ["run", "key", "value"]
+    got = {k: v for r, k, v in rows[1:] if r == run}
+    assert got["config"].startswith("config/agent.yaml @ ")
+    assert got["model.triage"] == "zai-org/GLM-5.3" and got["model.fix"] == "moonshotai/Kimi-K2.7-Code"
+    assert set(got) >= {"model.gate", "model.summary", "firecrawl.per_run_credits", "schedule"}

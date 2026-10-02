@@ -38,15 +38,15 @@ models:
   # Ashish's picks (2026-10-02). Prices are the cheapest live provider per 1M tokens
   # from `pr-agent models` on 2026-10-02; all served with tool calls.
   - id: nvidia/NVIDIA-Nemotron-3-Ultra-550B-A55B-NVFP4
-    roles: [main]
+    roles: [candidate]
     price_in: 0.6
     price_out: 2.4
-    note: main model; triage, delegation, gate synthesis, PR text
+    note: was main; NemoClaw onboarding got HTTP 400 on Chat Completions (Responses API worked), 2026-10-02
   - id: zai-org/GLM-5.3
-    roles: [main-backup, review]
+    roles: [main, review]
     price_in: 0.9
     price_out: 4.0
-    note: backup main if Ultra isn't served; second review pass
+    note: main model (Ultra failed onboarding); triage, delegation, gate synthesis, PR text
   - id: moonshotai/Kimi-K2.7-Code
     roles: [fix]
     price_in: 0.68

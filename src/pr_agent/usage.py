@@ -61,9 +61,10 @@ class UsageReport:
         return ""
 
 
-def report(state_db: Path, entries: list[ModelEntry], month_budget: float, day_budget: float, now: datetime | None = None) -> UsageReport:
+def report(state_db: Path, entries: list[ModelEntry], month_budget: float, day_budget: float, now: datetime | None = None, since: float | None = None) -> UsageReport:
+    """Spend from Hermes' session records, month to date (or from `since`, an epoch, when given)."""
     now = now or datetime.now(timezone.utc)
-    month_start = datetime(now.year, now.month, 1, tzinfo=timezone.utc).timestamp()
+    month_start = since if since is not None else datetime(now.year, now.month, 1, tzinfo=timezone.utc).timestamp()
     day_start = datetime(now.year, now.month, now.day, tzinfo=timezone.utc).timestamp()
     by_model: dict[str, dict[str, float]] = {}
     unknown: set[str] = set()

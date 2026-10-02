@@ -3,23 +3,25 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import secrets
+import subprocess
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
 from . import policy as policy_mod
-from .config import MissingSecret, Settings, secret
+from .config import REPO_ROOT, MissingSecret, Settings, secret
 from .devindex import DevIndex
 from .discover import DiscoveryRun
 from .github import GitHub
-from .ledger import Ledger, sync_to_dataset
+from .ledger import Ledger, append_tsv, sync_to_dataset
 from .publish import Refused, Registry, ack_comments, check_changes, claim_updates, open_pr, post_claim, pr_updates, record_gate
 from .state import CreditBook, SeenStore, read_json, write_json
-from .spend import snapshot as spend_snapshot
+from .spend import append_tokens, snapshot as spend_snapshot
 from .summary import compact_candidates, daily_digest, run_summary
 from .usage import menu, report, router_models
 from .workspace import Meta, diff_hash, diff_text, prepare, run_tests, setup_env
@@ -27,6 +29,9 @@ from .workspace import Meta, diff_hash, diff_text, prepare, run_tests, setup_env
 
 def out(data: Any) -> None:
     print(json.dumps(data, indent=2, default=str) if not isinstance(data, str) else data)
+
+
+RUN_CONFIG_COLUMNS = ("run", "key", "value")
 
 
 class App:
@@ -78,12 +83,46 @@ class App:
         key = os.environ.get("PRAGENT_FIRECRAWL_KEY") or os.environ.get("FIRECRAWL_API_KEY", "")
         return spend_snapshot(self.s.state_dir, self.s.ledger_dir, self.s.agent, hf_month_usd, key)
 
+    def run_tokens(self, run: str) -> int:
+        """Per-model token use since the run's start row, appended to ledger/tokens.tsv."""
+        start = next((r["ts"] for r in self.ledger.run_rows(run) if r.get("phase") == "start"), "")
+        if not start:
+            return 0
+        since = datetime.strptime(start, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc).timestamp()
+        u = self.s.agent.get("usage", {})
+        hermes_home = Path(os.environ.get("HERMES_HOME", Path.home() / ".hermes"))
+        by_model = report(hermes_home / "state.db", menu(self.s.agent), u.get("monthly_budget_usd", 20), 0, since=since).by_model
+        label = read_json(self.s.state_dir / "current_run.json", {}).get("label", "run")
+        return append_tokens(self.s.ledger_dir / "tokens.tsv", run, f"pr-agent-{label}", by_model)
+
+    def run_config(self) -> list[list[str]]:
+        """What this run is configured with, for ledger/run_config.tsv."""
+        cfg_path = Path(os.environ.get("PR_AGENT_CONFIG", REPO_ROOT / "config" / "agent.yaml"))
+        try:
+            sha = subprocess.run(["git", "-C", str(REPO_ROOT), "rev-parse", "--short", "HEAD"], capture_output=True, text=True, timeout=10).stdout.strip()
+        except (OSError, subprocess.SubprocessError):
+            sha = ""
+        if not sha and cfg_path.exists():
+            sha = "sha256:" + hashlib.sha256(cfg_path.read_bytes()).hexdigest()[:7]
+        entries = menu(self.s.agent)
+        role = lambda r: ",".join(e.id for e in entries if r in e.roles) or "-"  # noqa: E731
+        return [
+            ["config", f"config/agent.yaml @ {sha or 'unknown'}"],
+            ["model.triage", role("main")],
+            ["model.fix", role("fix")],
+            ["model.gate", role("review")],
+            ["model.summary", role("main")],
+            ["firecrawl.per_run_credits", str(self.s.query_bank.get("max_credits_per_run", ""))],
+            ["schedule", os.environ.get("PR_AGENT_RUN_SCHEDULE", "0 */4 * * *")],
+        ]
+
     # Commands
 
     def run_start(self, label: str = "run") -> str:
         run = datetime.now(timezone.utc).strftime("%Y%m%dT%H%MZ") + "-" + secrets.token_hex(2)
         write_json(self.s.state_dir / "current_run.json", {"run": run, "label": label, "started_at": datetime.now(timezone.utc).isoformat(timespec="seconds")})
         self.ledger.log("start", run, f"started {label} run", "cron tick", f"host={os.uname().nodename}", "open")
+        append_tsv(self.s.ledger_dir / "run_config.tsv", RUN_CONFIG_COLUMNS, [[run, k, v] for k, v in self.run_config()])
         return run
 
     def discover(self) -> dict[str, Any]:
@@ -131,7 +170,7 @@ class App:
         if not self.registry.prs() and not self.registry.claims():
             return {}
         gh = self.gh()
-        items = {"prs": pr_updates(gh, self.registry), "claims": [c for c in claim_updates(gh, self.registry) if c["state"] != "waiting" or c["replies"]]}
+        items = {"prs": pr_updates(gh, self.registry, self.ledger), "claims": [c for c in claim_updates(gh, self.registry) if c["state"] != "waiting" or c["replies"]]}
         return {k: v for k, v in items.items() if v}
 
     def prestep_follow_up(self) -> dict[str, Any]:
@@ -333,6 +372,7 @@ def dispatch(app: App, a: argparse.Namespace) -> int:  # noqa: C901 - flat comma
             usage = f"Model spend today ${g.day_usd:.2f}, this month ${g.month_usd:.2f} of ${g.month_budget:.2f}."
             run = a.run or app.run_id
             app.spend(g.month_usd)
+            app.run_tokens(run)
             out(run_summary(app.ledger.run_rows(run), app.registry, run, usage))
             app.ledger.log("run.end", run, "sent run summary", "end of run", "telegram", "done")
         else:
@@ -413,7 +453,7 @@ def pr_cmd(app: App, a: argparse.Namespace) -> int:
         SeenStore(app.s.state_dir / "seen.tsv").mark(meta.issue_id, "pr", "pr opened", None)
         out({"url": pr["html_url"], "number": pr["number"]})
     elif a.pcmd == "updates":
-        out({"prs": pr_updates(gh, app.registry)})
+        out({"prs": pr_updates(gh, app.registry, app.ledger)})
     elif a.pcmd in ("reply", "comment"):
         rec = app.registry.prs().get(a.key)
         if not rec:

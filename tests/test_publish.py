@@ -161,3 +161,17 @@ def test_unclear_policy_needs_the_switch(ws, tmp_path):
     with pytest.raises(Refused, match="policy is unclear"):
         preflight(ws, unclear, Registry(tmp_path), LIMITS, "fix(pkg): add numbers", BODY)
     preflight(ws, unclear, Registry(tmp_path), LIMITS, "fix(pkg): add numbers", BODY, allow_unclear=True)
+
+
+def test_pr_outcome_logged_once(gh, fake, tmp_path):
+    from pr_agent.publish import pr_updates
+    reg, led = Registry(tmp_path), Ledger(tmp_path / "d.tsv", "r2")
+    reg.save_pr("o/r#42", {"repo": "o/r", "number": 42, "url": "https://github.com/o/r/pull/42", "issue_id": "issue:o/r#7", "state": "open"})
+    fake.add("GET", "/user", {"login": "bot"})
+    fake.add("GET", "/repos/o/r/pulls/42", {"state": "closed", "merged_at": "2026-10-02T10:00:00Z", "merged_by": {"login": "maint"}})
+    fake.add("GET", "/repos/o/r/pulls/42/comments?per_page=100", [])
+    fake.add("GET", "/repos/o/r/issues/42/comments?per_page=100", [])
+    assert pr_updates(gh, reg, led)[0]["state"] == "merged"
+    row = led.rows()[-1]
+    assert (row["phase"], row["subject"], row["decision"], row["why"], row["result"]) == ("pr.outcome", "issue:o/r#7", "merged o/r#42", "merged by maint", "merged")
+    assert pr_updates(gh, reg, led) == [] and len(led.rows()) == 1
