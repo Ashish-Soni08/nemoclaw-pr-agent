@@ -15,7 +15,10 @@ nemohermes "$SANDBOX" exec -- bash -c 'mkdir -p /sandbox/.pr-agent/bin && cp -f 
 
 say "Installing skills"
 for dir in "$REPO_DIR"/skills/*/; do
-  nemohermes "$SANDBOX" skill install "$dir"
+  name="$(basename "$dir")"
+  # skill install refuses to replace a skill a previous deploy installed, so drop ours first.
+  nemohermes "$SANDBOX" exec -- rm -rf "/sandbox/.hermes/skills/$name"
+  nemohermes "$SANDBOX" skill install "$dir" || echo "kept the installed $name"
 done
 nemohermes "$SANDBOX" skill list
 
