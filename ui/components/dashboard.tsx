@@ -50,7 +50,7 @@ export function Dashboard({ view }: { view: View }) {
         <header className="grid grid-cols-[1fr_auto] items-center gap-3 sm:grid-cols-[1fr_auto_1fr]">
           <span className="hidden sm:block" />
           <div className="grid justify-items-start gap-1.5 sm:justify-items-center sm:text-center">
-            <h1 className="text-xl font-bold tracking-tight">NemoClaw PR Agent · Ledger</h1>
+            <h1 className="text-xl font-bold tracking-tight">NemoClaw PR Agent: Ledger</h1>
             {view.origin.kind === "sample" ? (
               <Pill tone="warn" title="Set LEDGER_DATASET and HF_TOKEN to read the agent's real ledger">Sample data</Pill>
             ) : (
