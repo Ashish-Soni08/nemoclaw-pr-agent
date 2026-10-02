@@ -2,6 +2,8 @@
 
 Autonomous NemoClaw agent that finds open-source issues where AI contributions are welcome, fixes them in a sandbox and opens PRs, with every decision logged. Built for the NVIDIA Berlin Claw Agent Challenge.
 
+**Demo video (90 s):** [docs/media/demo.mp4](docs/media/demo.mp4), made from the agent's real run on 2026-10-02: policy checks, 7 issues triaged, one taken and stopped cleanly when GitHub refused a write.
+
 It runs on a schedule with no human approval step. A self-review gate (a correctness pass and a security pass, run in parallel on the exact diff) decides whether a PR opens, and hard checks in code enforce the rest: the repo's AI policy, daily caps, one open PR per repo, no CI edits, never merge. Telegram gets a summary after every run.
 
 ## How a run works
