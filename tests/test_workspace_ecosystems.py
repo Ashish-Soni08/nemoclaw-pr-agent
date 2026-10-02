@@ -35,3 +35,10 @@ def test_node_test_command(tmp_path):
     assert detect_test_cmd(ws, "node") == "npm test"
     (ws / "package.json").write_text(json.dumps({"scripts": {"test": 'echo "Error: no test specified" && exit 1'}}))
     assert detect_test_cmd(ws, "node") == ""
+
+
+def test_yarn_berry_tests_run_through_corepack(tmp_path):
+    ws = make(tmp_path / "w", {"package.json": json.dumps({"packageManager": "yarn@4.5.0", "scripts": {"test": "jest"}}), "yarn.lock": ""})
+    assert detect_test_cmd(ws, "node") == "corepack yarn run test"
+    (ws / "package.json").write_text(json.dumps({"scripts": {"test": "jest"}}))
+    assert detect_test_cmd(ws, "node") == "yarn run test"

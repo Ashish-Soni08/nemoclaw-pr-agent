@@ -135,13 +135,20 @@ PM_CMD = {"npm": "npm", "pnpm": "npx --yes pnpm", "bun": "npx --yes bun", "yarn"
 NPM_DEFAULT_TEST = "no test specified"
 
 
+def pm_command(ws: Path, pm: str) -> str:
+    """How to invoke `pm` in this repo. Yarn 2+ (berry, pinned in packageManager) runs through corepack."""
+    if pm == "yarn" and not str(_package_json(ws).get("packageManager", "yarn@1")).startswith("yarn@1"):
+        return "corepack yarn"
+    return PM_CMD[pm]
+
+
 def detect_test_cmd(ws: Path, ecosystem: str = "python") -> str:
     """Best guess at the repo's own test command. The model may override it with evidence."""
     if ecosystem == "node":
         pm = node_pm(ws)
         test = str(_package_json(ws).get("scripts", {}).get("test", ""))
         if test and NPM_DEFAULT_TEST not in test:
-            return f"{PM_CMD[pm]} run test" if pm != "npm" else "npm test"
+            return f"{pm_command(ws, pm)} run test" if pm != "npm" else "npm test"
         return "npx --yes bun test" if pm == "bun" else ""
     py = ".venv-pr-agent/bin/python"
     files = {p.name for p in ws.iterdir()}
@@ -201,9 +208,7 @@ def _setup_node(ws: Path, timeout: int) -> dict[str, Any]:
     except RuntimeError as err:
         return out | {"error": str(err), "seconds": round(time.monotonic() - started, 1)}
     pm = out["pm"] = node_pm(ws)
-    base = shlex.split(PM_CMD[pm])
-    if pm == "yarn" and not str(_package_json(ws).get("packageManager", "yarn@1")).startswith("yarn@1"):
-        base = ["corepack", "yarn"]  # Yarn 2+ (berry), pinned by the repo
+    base = shlex.split(pm_command(ws, pm))
     if pm == "npm":
         attempts = [["npm", "ci"], ["npm", "install"]] if (ws / "package-lock.json").exists() else [["npm", "install"]]
     else:
