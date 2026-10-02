@@ -32,7 +32,6 @@ export function HealthStrip({ health, now }: { health: Health; now: string }) {
         <div className="grid min-w-0 gap-0.5">
           <Label>Runs today</Label>
           <b className="font-mono text-[15px] font-semibold">{health.runsToday}</b>
-          <Muted>scheduled by Hermes cron</Muted>
         </div>
       </Cell>
       <Cell>

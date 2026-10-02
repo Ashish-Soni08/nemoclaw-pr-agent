@@ -13,8 +13,8 @@ export function CreditsPanel({ credits }: { credits: Credit[] }) {
   return (
     <section aria-label="Credits" className="grid gap-3.5 rounded-lg border bg-card p-4">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <Label>Credits · what&apos;s left and what the agent is spending</Label>
-        <span className="text-xs text-muted-foreground">The usage guard stops a run when a provider reaches its limit · updated at the end of every run</span>
+        <Label>Credits</Label>
+        <span className="text-xs text-muted-foreground">A run stops when any provider hits its limit</span>
       </div>
       {credits.length === 0 ? (
         <p className="text-sm text-muted-foreground">No spend rows yet. The agent writes one per provider at the end of each run.</p>

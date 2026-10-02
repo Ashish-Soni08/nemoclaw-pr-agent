@@ -40,7 +40,7 @@ export function RunsPanel({ runs, rejections, models, tokensFromSample }: { runs
     <div className="grid gap-[18px]">
       <section aria-label="Runs" className="min-w-0 rounded-lg border bg-card">
         <div className="flex flex-wrap items-baseline justify-between gap-2 border-b px-3.5 py-3">
-          <Label>Every run · click one to see how it was set up and which model did what</Label>
+          <Label>Runs · click one for its setup and models</Label>
           <span className="text-xs text-muted-foreground">Stalled means no run end and no new rows for 2 hours</span>
         </div>
         <Table>
@@ -69,7 +69,7 @@ export function RunsPanel({ runs, rejections, models, tokensFromSample }: { runs
                   aria-current={r.run === picked}
                   onClick={() => setPicked(r.run)}
                   onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setPicked(r.run); } }}
-                  className={cn("cursor-pointer focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-primary", r.run === picked && "bg-accent hover:bg-accent")}
+                  className={cn("cursor-pointer focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-foreground/60", r.run === picked && "bg-accent hover:bg-accent")}
                 >
                   <TableCell>
                     <span className="block font-mono text-xs">{r.run}</span>
@@ -171,7 +171,7 @@ function RunDetail({ run }: { run: RunRow }) {
     <section aria-label="Run detail" className="grid min-w-0 gap-[18px] rounded-lg border bg-card p-4">
       <div className="grid justify-items-start gap-2">
         <Pill tone={STATE_TONE[run.state]}>{run.state}</Pill>
-        <h2 className="text-lg font-semibold">
+        <h2 className="text-lg font-semibold text-balance">
           <span className="font-mono">{run.run}</span> · {when(run.started)} UTC
         </h2>
       </div>
@@ -193,7 +193,7 @@ function RunDetail({ run }: { run: RunRow }) {
       </div>
 
       <div className="grid gap-2">
-        <Label>Issues worked on · which model did each step</Label>
+        <Label>Issues worked on</Label>
         {run.issues.length === 0 ? (
           <p className="text-sm text-muted-foreground">No issue reached triage, a claim or a fix in this run. {run.stateWhy}.</p>
         ) : (

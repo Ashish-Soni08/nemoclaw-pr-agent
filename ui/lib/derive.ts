@@ -198,7 +198,7 @@ function formatRunout(now: string, days: number): string {
 }
 
 function history(spend: Spend[], entries: Entry[], now: string): DayTotals[] {
-  const first = [spend[0]?.ts, entries[0]?.ts].filter(Boolean).map((t) => day(t!)).sort()[0];
+  const first = [spend[0]?.ts, entries[0]?.ts].filter((t): t is string => !!t).map(day).sort()[0];
   if (!first) return [];
   const days = daysBetween(first, day(now));
   const per = Object.fromEntries(ORDER.map((p) => [p, spendPerDay(spend, p, days)]));
@@ -215,7 +215,6 @@ function history(spend: Spend[], entries: Entry[], now: string): DayTotals[] {
 // (a crash, or a prompt waiting for approval that never comes).
 const STALL_MS = 2 * 60 * 60 * 1000;
 
-// Order steps the way the pipeline runs them.
 const STEP_ORDER = ["discover", "triage", "claim", "fix", "gate", "follow-up", "summary"];
 const stepRank = (s: string) => (STEP_ORDER.indexOf(s) + 1 || 99);
 

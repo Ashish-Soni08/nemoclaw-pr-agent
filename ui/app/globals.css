@@ -153,3 +153,20 @@
     @apply font-sans;
   }
 }
+/* Digits in data never jiggle as values change. */
+.font-mono {
+  font-variant-numeric: tabular-nums;
+}
+
+/* The only motion is hover color and press feedback; drop both for reduced motion. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  ::before,
+  ::after {
+    transition: none !important;
+    animation: none !important;
+  }
+  *:active {
+    scale: none !important;
+  }
+}

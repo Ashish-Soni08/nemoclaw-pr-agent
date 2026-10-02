@@ -42,7 +42,6 @@ export function Dashboard({ view }: { view: View }) {
   );
   const [picked, setPicked] = useState<string | null>(null);
   const selected = rows.find((r) => r.id === picked) ?? rows[0] ?? null;
-  const prsToday = view.entries.filter((e) => e.day === day && e.phase === "pr.opened").length;
 
   return (
     <main className="mx-auto grid max-w-[1240px] gap-[18px] px-4 pt-5 pb-12 sm:px-5">
@@ -50,7 +49,7 @@ export function Dashboard({ view }: { view: View }) {
         <header className="grid grid-cols-[1fr_auto] items-center gap-3 sm:grid-cols-[1fr_auto_1fr]">
           <span className="hidden sm:block" />
           <div className="grid justify-items-start gap-1.5 sm:justify-items-center sm:text-center">
-            <h1 className="text-xl font-bold tracking-tight">NemoClaw PR Agent: Ledger</h1>
+            <h1 className="text-xl font-bold tracking-tight text-balance">NemoClaw PR Agent: Ledger</h1>
             {view.origin.kind === "sample" ? (
               <Pill tone="warn" title="Set LEDGER_DATASET and HF_TOKEN to read the agent's real ledger">Sample data</Pill>
             ) : (
@@ -77,7 +76,7 @@ export function Dashboard({ view }: { view: View }) {
         </div>
 
         <TabsContent value="activity" className="grid gap-[18px]">
-          <Funnel stages={stages} active={stage} onPick={(k) => { setStage(stage === k ? null : k); setPicked(null); }} prs={prsToday} />
+          <Funnel stages={stages} active={stage} onPick={(k) => { setStage(stage === k ? null : k); setPicked(null); }} />
           <div className="grid gap-[18px] lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]">
             <section aria-label="Timeline" className="flex min-w-0 flex-col rounded-lg border bg-card">
               <div className="flex flex-wrap items-center justify-between gap-2 border-b px-3.5 py-3">
@@ -94,13 +93,14 @@ export function Dashboard({ view }: { view: View }) {
                   <li className="px-3.5 py-6 text-sm text-muted-foreground">No entries match this filter.</li>
                 ) : (
                   rows.map((e) => (
-                    <li key={e.id}>
+                    // A day can log hundreds of rows; let the browser skip rendering the ones scrolled out of view.
+                    <li key={e.id} className="[contain-intrinsic-size:auto_76px] [content-visibility:auto]">
                       <button
                         type="button"
                         onClick={() => setPicked(e.id)}
                         aria-current={selected?.id === e.id}
                         className={cn(
-                          "grid w-full grid-cols-[46px_minmax(0,1fr)_auto] items-start gap-2.5 border-b px-3.5 py-2.5 text-left hover:bg-muted focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-primary",
+                          "grid w-full grid-cols-[46px_minmax(0,1fr)_auto] items-start gap-2.5 border-b px-3.5 py-2.5 text-left hover:bg-muted focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-foreground/60",
                           selected?.id === e.id && "bg-accent hover:bg-accent",
                         )}
                       >
@@ -131,7 +131,7 @@ export function Dashboard({ view }: { view: View }) {
         <TabsContent value="repos">
           <section aria-label="Repo policy verdicts" className="rounded-lg border bg-card">
             <div className="border-b px-3.5 py-3">
-              <Label>AI-contribution policy per repo · the agent only works where the verdict allows it</Label>
+              <Label>AI-contribution policy per repo</Label>
             </div>
             <Table>
               <TableHeader>
@@ -170,13 +170,13 @@ export function Dashboard({ view }: { view: View }) {
   );
 }
 
-function Funnel({ stages, active, onPick, prs }: { stages: Stage[]; active: string | null; onPick: (k: string) => void; prs: number }) {
+function Funnel({ stages, active, onPick }: { stages: Stage[]; active: string | null; onPick: (k: string) => void }) {
   const max = Math.max(...stages.map((s) => s.count), 1);
   return (
     <section aria-label="Daily funnel" className="grid gap-3 rounded-lg border bg-card p-4">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <Label>Today&apos;s funnel · click a stage to filter the timeline</Label>
-        <span className="text-xs text-muted-foreground">PRs opened <b className="font-mono text-foreground">{prs}</b></span>
+        <Label>Today’s funnel</Label>
+        <span className="text-xs text-muted-foreground">Click a stage to filter the timeline</span>
       </div>
       <div className="grid grid-cols-2 gap-y-3.5 sm:grid-cols-3 lg:grid-cols-6">
         {stages.map((s, i) => (
@@ -186,7 +186,7 @@ function Funnel({ stages, active, onPick, prs }: { stages: Stage[]; active: stri
             aria-pressed={active === s.key}
             onClick={() => onPick(s.key)}
             className={cn(
-              "grid content-start gap-1.5 border-dashed py-1 pr-3 text-left focus-visible:outline-2 focus-visible:outline-primary",
+              "grid content-start gap-1.5 rounded-sm border-dashed py-1 pr-3 text-left transition-[background-color,transform] duration-150 ease-out hover:bg-muted/60 active:scale-[0.96] focus-visible:outline-2 focus-visible:outline-foreground/60",
               i > 0 && "lg:border-l lg:pl-3",
             )}
           >
@@ -210,7 +210,7 @@ function NativeSelect({ id, label, value, onChange, children }: { id: string; la
       aria-label={label}
       value={value}
       onChange={(e) => onChange(e.target.value)}
-      className="h-8 rounded-md border bg-card px-2 text-sm text-foreground focus-visible:outline-2 focus-visible:outline-primary"
+      className="h-8 rounded-md border bg-card px-2 text-base text-foreground focus-visible:outline-2 focus-visible:outline-foreground/60 sm:text-sm pointer-coarse:h-11"
     >
       {children}
     </select>

@@ -50,7 +50,7 @@ export function SpendHistory({ days }: { days: DayTotals[] }) {
               role="radio"
               aria-checked={grain === g}
               onClick={() => setGrain(g)}
-              className={cn("px-3 py-1 text-[13px] text-muted-foreground capitalize focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-primary", grain === g && "bg-accent font-semibold text-foreground")}
+              className={cn("px-3 py-1 text-[13px] text-muted-foreground capitalize hover:text-foreground focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-foreground/60 pointer-coarse:min-h-11 pointer-coarse:px-4", grain === g && "bg-accent text-foreground")}
             >
               {g}
             </button>

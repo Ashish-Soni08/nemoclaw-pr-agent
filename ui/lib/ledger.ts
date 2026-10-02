@@ -124,8 +124,7 @@ async function fromSample(file: string): Promise<string> {
 export async function loadLedger(): Promise<Ledger> {
   const dataset = process.env.LEDGER_DATASET?.replace(/^datasets\//, "").replace(/\/+$/, "");
   const read = dataset ? (f: string) => fromDataset(dataset, f) : fromSample;
-  const optional = (f: string) => read(f).catch(() => "");
-  const [d, s, t, c] = await Promise.all([read("decisions.tsv"), read("spend.tsv"), optional("tokens.tsv"), optional("run_config.tsv")]);
+  const [d, s, t, c] = await Promise.all(["decisions.tsv", "spend.tsv", "tokens.tsv", "run_config.tsv"].map(read));
   return {
     decisions: toDecisions(d),
     spend: toSpend(s),

@@ -14,7 +14,7 @@ export function ThemeToggle() {
   const mounted = useSyncExternalStore(noop, () => true, () => false);
   const dark = mounted && resolvedTheme === "dark";
   return (
-    <Button variant="outline" size="icon" aria-label={dark ? "Switch to light theme" : "Switch to dark theme"} onClick={() => setTheme(dark ? "light" : "dark")}>
+    <Button variant="outline" size="icon" className="pointer-coarse:size-11" aria-label={dark ? "Switch to light theme" : "Switch to dark theme"} onClick={() => setTheme(dark ? "light" : "dark")}>
       <SunIcon className="dark:hidden" />
       <MoonIcon className="hidden dark:block" />
     </Button>
