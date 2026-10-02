@@ -40,6 +40,7 @@ if [[ -n "${TELEGRAM_BOT_TOKEN:-}" ]]; then
   say "Telegram channel for run summaries"
   nemohermes "$SANDBOX" channels add telegram
   nemohermes "$SANDBOX" rebuild --yes
+  echo "The rebuild detaches provider keys: run scripts/setup-credentials.sh, then scripts/deploy.sh."
 else
   echo "TELEGRAM_BOT_TOKEN not set: skipping Telegram. Re-run with it set to get run summaries."
 fi
