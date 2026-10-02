@@ -9,6 +9,8 @@ OpenShell egress for the agent's sandbox. Everything else stays blocked.
 | Firecrawl Developer Index | `provider-profiles/pr-agent-firecrawl.yaml` | injected at egress |
 | `git clone` of public repos | `presets/pr-agent-git.yaml` (fetch only) | none |
 | PyPI (installing a target repo's test deps) | built-in `pypi` preset | none |
+| npm and Yarn registries (JS/TS test deps via npm, pnpm, yarn) | built-in `npm` preset | none |
+| bun, and pip inside per-workspace venvs | `presets/pr-agent-packages.yaml` | none |
 | Telegram (run summaries) | `nemohermes <sandbox> channels add telegram` applies its own preset | bot token held by the gateway |
 
 The Hugging Face ledger dataset is written from the host (`scripts/sync-ledger.sh`), so the sandbox never holds a write token for it.

@@ -2,7 +2,8 @@
 # Editable without code changes. Every run takes the next topics_per_run topics
 # and shapes_per_run shapes in the rotation (state/rotation.json).
 
-language: Python
+# One language per query, rotating (Ashish 2026-10-02: Python, JavaScript, TypeScript; not Rust).
+languages: [Python, JavaScript, TypeScript]
 min_stars: 200
 max_stars: 30000
 k: 20

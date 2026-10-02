@@ -30,20 +30,23 @@ def plan_queries(bank: dict[str, Any], rotation_path: Path) -> Plan:
     topics: list[str] = bank["topics"]
     shapes: list[str] = bank["shapes"]
     rot = read_json(rotation_path, {"topic": 0, "shape": 0})
+    # One language per query, rotating, so every run covers several languages for the same credits.
+    languages: list[str] = bank.get("languages") or [bank.get("language", "Python")]
+    lang_at = rot.get("language", 0)
     t_n, s_n = bank.get("topics_per_run", 3), bank.get("shapes_per_run", 2)
     run_topics = [topics[(rot["topic"] + i) % len(topics)] for i in range(t_n)]
     run_shapes = [shapes[(rot["shape"] + i) % len(shapes)] for i in range(s_n)]
-    write_json(rotation_path, {"topic": (rot["topic"] + t_n) % len(topics), "shape": (rot["shape"] + s_n) % len(shapes)})
     queries = []
     for topic in run_topics:
         for shape in run_shapes:
+            language = languages[(lang_at + len(queries)) % len(languages)]
             queries.append(
                 {
                     "query": shape,
                     "types": ["issue"],
                     "k": bank.get("k", 20),
                     "passages": 2,
-                    "language": bank.get("language", "Python"),
+                    "language": language,
                     "topic": topic,
                     "min_stars": bank.get("min_stars", 200),
                     "max_stars": bank.get("max_stars", 30000),
@@ -51,6 +54,7 @@ def plan_queries(bank: dict[str, Any], rotation_path: Path) -> Plan:
                     "fork": False,
                 }
             )
+    write_json(rotation_path, {"topic": (rot["topic"] + t_n) % len(topics), "shape": (rot["shape"] + s_n) % len(shapes), "language": (lang_at + len(queries)) % len(languages)})
     return Plan(queries, run_topics, run_shapes)
 
 

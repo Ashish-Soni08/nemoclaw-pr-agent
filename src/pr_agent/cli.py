@@ -428,14 +428,14 @@ def workspace_cmd(app: App, a: argparse.Namespace) -> int:
         repo, num = parse_issue_id(a.issue_id)
         info = app.gh().repo(repo)
         meta = prepare(a.issue_id, repo, num, info["default_branch"], app.s.workspaces_dir)
-        app.ledger.log("fix.workspace", a.issue_id, "prepared workspace", f"base {meta.base_branch}@{meta.base_sha[:10]}", meta.path, "ready")
+        app.ledger.log("fix.workspace", a.issue_id, f"prepared workspace ({meta.ecosystem})", f"base {meta.base_branch}@{meta.base_sha[:10]}; tests: {meta.test_cmd or 'none detected'}", meta.path, "ready")
         out(meta.__dict__)
         return 0
     meta = Meta.load(Path(a.path))
     ws = Path(meta.path)
     if a.wcmd == "setup":
-        res = setup_env(ws)
-        app.ledger.log("fix.setup", meta.issue_id, "installed the project", f"installed={res['installed']}", meta.path, "ok" if res["installed"] else "install failed")
+        res = setup_env(ws, ecosystem=meta.ecosystem)
+        app.ledger.log("fix.setup", meta.issue_id, f"installed the project ({res['ecosystem']})", f"installed={res['installed']}" + (f"; {res['error'][:150]}" if res.get("error") else ""), meta.path, "ok" if res["installed"] else "install failed")
         out(res)
     elif a.wcmd == "test":
         cmd = a.cmd or meta.test_cmd

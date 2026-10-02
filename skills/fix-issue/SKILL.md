@@ -11,7 +11,7 @@ metadata:
 
 # Fix one issue
 
-Modeled on Benny's `reproduce-and-fix-issues` (cursor/plugins pstack/automations/benny, MIT): no confirmed repro means no fix, an existing fix switches to verify-only, and the PR comes only after before-and-after proof. Here the surface is the repo's own Python code and tests, and the PR is opened by the parent after the gate.
+Modeled on Benny's `reproduce-and-fix-issues` (cursor/plugins pstack/automations/benny, MIT): no confirmed repro means no fix, an existing fix switches to verify-only, and the PR comes only after before-and-after proof. Here the surface is the repo's own code and tests (Python or JavaScript/TypeScript), and the PR is opened by the parent after the gate.
 
 Your goal names the issue id, the lane, the playbook, and maybe a workspace. Load **pr-agent-mode**, then follow these steps and the named playbook's steps together.
 
@@ -27,7 +27,7 @@ Your goal names the issue id, the lane, the playbook, and maybe a workspace. Loa
 
 ```
 pr-agent workspace prepare <issue_id>     # clone default branch, branch pr-agent/issue-N
-pr-agent workspace setup <ws>             # venv + editable install with test extras
+pr-agent workspace setup <ws>             # the repo's own toolchain: venv + pip (Python), npm/pnpm/bun/yarn from its lockfile (JS/TS)
 pr-agent workspace test <ws> --label baseline [--cmd "<repo's own test command>"]
 ```
 
