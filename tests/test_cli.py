@@ -21,7 +21,8 @@ def test_log_show_and_summary(home, capsys):
     capsys.readouterr()
     assert cli.main(["summary", "run"]) == 0
     text = capsys.readouterr().out
-    assert f"PR agent run {run}" in text and "+ issue:o/r#1: clear repro" in text
+    assert "**PR agent run**" in text and "• [o/r#1](https://github.com/o/r/issues/1): clear repro" in text
+    assert "💸 **Spend** $0.00 / $" in text
     spend = (home / "ledger" / "spend.tsv").read_text().splitlines()
     assert spend[0].split("\t") == ["ts", "provider", "used", "unit", "cost_usd", "remaining", "limit", "source"]
     assert [l.split("\t")[1] for l in spend[1:]] == ["huggingface", "firecrawl", "lambda"]
@@ -61,5 +62,5 @@ def test_run_start_records_run_config(home):
     assert rows[0] == ["run", "key", "value"]
     got = {k: v for r, k, v in rows[1:] if r == run}
     assert got["config"].startswith("config/agent.yaml @ ")
-    assert got["model.triage"] == "zai-org/GLM-5.3" and got["model.fix"] == "moonshotai/Kimi-K2.7-Code"
+    assert got["model.triage"] == "zai-org/GLM-5.3" and got["model.fix"] == "moonshotai/Kimi-K3"
     assert set(got) >= {"model.gate", "model.summary", "firecrawl.per_run_credits", "schedule"}

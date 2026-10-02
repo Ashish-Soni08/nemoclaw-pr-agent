@@ -151,3 +151,12 @@ def test_discovery_stops_when_index_unavailable(tmp_path):
     assert summary["index_unavailable"] is True
     assert len(fi.calls) == 1
     assert summary["candidates"] == 0
+
+
+def test_queries_rotate_languages(tmp_path):
+    from pr_agent.discover import plan_queries
+    bank = {"topics": ["llm", "nlp"], "shapes": ["bug"], "topics_per_run": 2, "shapes_per_run": 1, "languages": ["Python", "JavaScript", "TypeScript"]}
+    first = [q["language"] for q in plan_queries(bank, tmp_path / "rot.json").queries]
+    second = [q["language"] for q in plan_queries(bank, tmp_path / "rot.json").queries]
+    assert first == ["Python", "JavaScript"]
+    assert second == ["TypeScript", "Python"]

@@ -83,6 +83,13 @@ class App:
         key = os.environ.get("PRAGENT_FIRECRAWL_KEY") or os.environ.get("FIRECRAWL_API_KEY", "")
         return spend_snapshot(self.s.state_dir, self.s.ledger_dir, self.s.agent, hf_month_usd, key)
 
+    def ledger_url(self) -> str:
+        led = self.s.agent.get("ledger", {})
+        if led.get("public_url"):
+            return led["public_url"]
+        repo = os.environ.get("LEDGER_DATASET") or led.get("hf_dataset", "")
+        return f"https://huggingface.co/datasets/{repo}/viewer" if repo else ""
+
     def run_tokens(self, run: str) -> int:
         """Per-model token use since the run's start row, appended to ledger/tokens.tsv."""
         start = next((r["ts"] for r in self.ledger.run_rows(run) if r.get("phase") == "start"), "")
@@ -369,14 +376,27 @@ def dispatch(app: App, a: argparse.Namespace) -> int:  # noqa: C901 - flat comma
     elif a.cmd == "summary":
         if a.scmd == "run":
             g = app.guard()
-            usage = f"Model spend today ${g.day_usd:.2f}, this month ${g.month_usd:.2f} of ${g.month_budget:.2f}."
             run = a.run or app.run_id
-            app.spend(g.month_usd)
+            budgets = {r.provider: r for r in app.spend(g.month_usd)}
+            usage = f"${g.month_usd:.2f} / ${g.month_budget:.0f} HF"
+            if "firecrawl" in budgets:
+                fc = budgets["firecrawl"]
+                usage += f" · {fc.used:,.0f} / {fc.limit / 1000:,.0f}k Firecrawl"
             app.run_tokens(run)
-            out(run_summary(app.ledger.run_rows(run), app.registry, run, usage))
+            out(run_summary(app.ledger.run_rows(run), app.registry, run, usage, app.ledger_url()))
             app.ledger.log("run.end", run, "sent run summary", "end of run", "telegram", "done")
         else:
-            out(daily_digest(app.ledger.rows(), app.registry, datetime.now(timezone.utc).date().isoformat()))
+            g = app.guard()
+            left = {r.provider: r for r in app.spend(g.month_usd)}
+            parts = []
+            if "huggingface" in left:
+                parts.append(f"${left['huggingface'].remaining:,.0f} HF")
+            if "lambda" in left:
+                parts.append(f"${left['lambda'].remaining:,.0f} Lambda")
+            if "firecrawl" in left:
+                parts.append(f"{left['firecrawl'].remaining:,.0f} Firecrawl")
+            spend_lines = [f"Today ${g.day_usd:.2f}"] + (["Left: " + " · ".join(parts)] if parts else [])
+            out(daily_digest(app.ledger.rows(), app.registry, datetime.now(timezone.utc).date().isoformat(), spend_lines))
     elif a.cmd == "spend":
         out([r.__dict__ for r in app.spend()])
     elif a.cmd == "guard":
@@ -408,14 +428,14 @@ def workspace_cmd(app: App, a: argparse.Namespace) -> int:
         repo, num = parse_issue_id(a.issue_id)
         info = app.gh().repo(repo)
         meta = prepare(a.issue_id, repo, num, info["default_branch"], app.s.workspaces_dir)
-        app.ledger.log("fix.workspace", a.issue_id, "prepared workspace", f"base {meta.base_branch}@{meta.base_sha[:10]}", meta.path, "ready")
+        app.ledger.log("fix.workspace", a.issue_id, f"prepared workspace ({meta.ecosystem})", f"base {meta.base_branch}@{meta.base_sha[:10]}; tests: {meta.test_cmd or 'none detected'}", meta.path, "ready")
         out(meta.__dict__)
         return 0
     meta = Meta.load(Path(a.path))
     ws = Path(meta.path)
     if a.wcmd == "setup":
-        res = setup_env(ws)
-        app.ledger.log("fix.setup", meta.issue_id, "installed the project", f"installed={res['installed']}", meta.path, "ok" if res["installed"] else "install failed")
+        res = setup_env(ws, ecosystem=meta.ecosystem)
+        app.ledger.log("fix.setup", meta.issue_id, f"installed the project ({res['ecosystem']})", f"installed={res['installed']}" + (f"; {res['error'][:150]}" if res.get("error") else ""), meta.path, "ok" if res["installed"] else "install failed")
         out(res)
     elif a.wcmd == "test":
         cmd = a.cmd or meta.test_cmd

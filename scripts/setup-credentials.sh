@@ -5,7 +5,7 @@
 # Usage: GITHUB_TOKEN=... FIRECRAWL_API_KEY=... scripts/setup-credentials.sh
 source "$(dirname "$0")/_lib.sh"
 need openshell "installed with NemoClaw"
-need_env GITHUB_TOKEN "fine-grained token for the agent's GitHub account"
+need_env GITHUB_TOKEN "classic token with public_repo scope for the agent's GitHub account"
 need_env FIRECRAWL_API_KEY "Firecrawl API key"
 
 register() {  # profile-file provider-name profile-id env-name value

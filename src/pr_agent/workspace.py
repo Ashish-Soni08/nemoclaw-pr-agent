@@ -7,8 +7,10 @@ sandbox, with a time limit, and never with a credential in the environment.
 from __future__ import annotations
 
 import hashlib
+import json
 import os
 import shlex
+import shutil
 import subprocess
 import time
 from dataclasses import asdict, dataclass
@@ -17,11 +19,17 @@ from typing import Any
 
 from .state import read_json, write_json
 
-SAFE_ENV_KEYS = {"PATH", "HOME", "LANG", "LC_ALL", "TERM", "TMPDIR", "PIP_INDEX_URL", "PIP_CACHE_DIR", "HTTPS_PROXY", "HTTP_PROXY", "NO_PROXY", "SSL_CERT_FILE", "REQUESTS_CA_BUNDLE"}
+SAFE_ENV_KEYS = {
+    "PATH", "HOME", "LANG", "LC_ALL", "TERM", "TMPDIR", "PIP_INDEX_URL", "PIP_CACHE_DIR",
+    "HTTPS_PROXY", "HTTP_PROXY", "NO_PROXY", "SSL_CERT_FILE", "REQUESTS_CA_BUNDLE",
+    "NODE_EXTRA_CA_CERTS",
+}
+# Untracked build output that must never end up in a PR.
+EXCLUDES = (".pr-agent/", ".venv-pr-agent/", "node_modules/")
 
 
 def scrubbed_env(extra: dict[str, str] | None = None) -> dict[str, str]:
-    """Repo code (tests, setup.py) gets no tokens, keys or placeholders."""
+    """Repo code (tests, setup.py, install scripts) gets no tokens, keys or placeholders."""
     env = {k: v for k, v in os.environ.items() if k in SAFE_ENV_KEYS}
     env.update(extra or {})
     return env
@@ -45,6 +53,7 @@ class Meta:
     branch: str
     test_cmd: str = ""
     baseline: dict[str, Any] | None = None
+    ecosystem: str = "python"
 
     @property
     def meta_path(self) -> Path:
@@ -85,14 +94,62 @@ def prepare(issue_id: str, repo: str, number: int, base_branch: str, root: Path,
     exclude = ws / ".git" / "info" / "exclude"
     exclude.parent.mkdir(parents=True, exist_ok=True)
     with exclude.open("a") as fh:
-        fh.write("\n.pr-agent/\n.venv-pr-agent/\n")
-    meta = Meta(issue_id, repo, number, str(ws), base_branch, sha, branch, test_cmd=detect_test_cmd(ws))
+        fh.write("\n" + "\n".join(EXCLUDES) + "\n")
+    eco = detect_ecosystem(ws)
+    meta = Meta(issue_id, repo, number, str(ws), base_branch, sha, branch, test_cmd=detect_test_cmd(ws, eco), ecosystem=eco)
     meta.save()
     return meta
 
 
-def detect_test_cmd(ws: Path) -> str:
+def detect_ecosystem(ws: Path) -> str:
+    """python or node, from the files at the repo root. Python wins in mixed repos (docs tooling)."""
+    files = {p.name for p in ws.iterdir()}
+    if files & {"pyproject.toml", "setup.py", "setup.cfg"}:
+        return "python"
+    if "package.json" in files:
+        return "node"
+    return "python"
+
+
+def _package_json(ws: Path) -> dict[str, Any]:
+    try:
+        return json.loads((ws / "package.json").read_text())
+    except (OSError, ValueError):
+        return {}
+
+
+def node_pm(ws: Path) -> str:
+    """The package manager the repo uses: its packageManager field, else its lockfile, else npm."""
+    declared = str(_package_json(ws).get("packageManager", "")).split("@", 1)[0]
+    if declared in ("npm", "pnpm", "bun", "yarn"):
+        return declared
+    for lock, pm in (("pnpm-lock.yaml", "pnpm"), ("bun.lock", "bun"), ("bun.lockb", "bun"), ("yarn.lock", "yarn")):
+        if (ws / lock).exists():
+            return pm
+    return "npm"
+
+
+# How to invoke each package manager. The sandbox image ships node, npm, npx and yarn (classic);
+# pnpm and bun come from the npm registry through npx, so no extra download hosts are needed.
+PM_CMD = {"npm": "npm", "pnpm": "npx --yes pnpm", "bun": "npx --yes bun", "yarn": "yarn"}
+NPM_DEFAULT_TEST = "no test specified"
+
+
+def pm_command(ws: Path, pm: str) -> str:
+    """How to invoke `pm` in this repo. Yarn 2+ (berry, pinned in packageManager) runs through corepack."""
+    if pm == "yarn" and not str(_package_json(ws).get("packageManager", "yarn@1")).startswith("yarn@1"):
+        return "corepack yarn"
+    return PM_CMD[pm]
+
+
+def detect_test_cmd(ws: Path, ecosystem: str = "python") -> str:
     """Best guess at the repo's own test command. The model may override it with evidence."""
+    if ecosystem == "node":
+        pm = node_pm(ws)
+        test = str(_package_json(ws).get("scripts", {}).get("test", ""))
+        if test and NPM_DEFAULT_TEST not in test:
+            return f"{pm_command(ws, pm)} run test" if pm != "npm" else "npm test"
+        return "npx --yes bun test" if pm == "bun" else ""
     py = ".venv-pr-agent/bin/python"
     files = {p.name for p in ws.iterdir()}
     if "noxfile.py" in files and "tox.ini" not in files and not (ws / "tests").exists():
@@ -105,13 +162,21 @@ def detect_test_cmd(ws: Path) -> str:
     return ""
 
 
-def setup_env(ws: Path, timeout: int = 1200) -> dict[str, Any]:
+def setup_env(ws: Path, timeout: int = 1200, ecosystem: str = "") -> dict[str, Any]:
+    """Install the repo's dependencies with its own toolchain, so its tests can run."""
+    eco = ecosystem or detect_ecosystem(ws)
+    if eco == "node":
+        return _setup_node(ws, timeout)
+    return _setup_python(ws, timeout)
+
+
+def _setup_python(ws: Path, timeout: int) -> dict[str, Any]:
     """Venv plus an editable install with whatever test extras exist."""
     started = time.monotonic()
     venv = ws / ".venv-pr-agent"
     proc = run(["python3", "-m", "venv", str(venv)], cwd=ws, timeout=300)
     if proc.returncode != 0:
-        return {"installed": False, "error": proc.stderr[-300:], "seconds": round(time.monotonic() - started, 1)}
+        return {"ecosystem": "python", "installed": False, "error": proc.stderr[-300:], "seconds": round(time.monotonic() - started, 1)}
     pip = [str(venv / "bin" / "python"), "-m", "pip", "install", "-q"]
     run(pip + ["--upgrade", "pip"], cwd=ws, timeout=timeout)
     installed = False
@@ -124,7 +189,39 @@ def setup_env(ws: Path, timeout: int = 1200) -> dict[str, Any]:
         if (ws / req).exists():
             run(pip + ["-r", req], cwd=ws, timeout=timeout)
     run(pip + ["pytest"], cwd=ws, timeout=timeout)
-    return {"installed": installed, "seconds": round(time.monotonic() - started, 1)}
+    return {"ecosystem": "python", "installed": installed, "seconds": round(time.monotonic() - started, 1)}
+
+
+def ensure_node() -> str:
+    """Path to node. The NemoClaw sandbox image ships Node with npm, npx, yarn and corepack."""
+    found = shutil.which("node", path=scrubbed_env().get("PATH"))
+    if not found:
+        raise RuntimeError("no node in the sandbox")
+    return found
+
+
+def _setup_node(ws: Path, timeout: int) -> dict[str, Any]:
+    started = time.monotonic()
+    out: dict[str, Any] = {"ecosystem": "node", "installed": False}
+    try:
+        out["node"] = ensure_node()
+    except RuntimeError as err:
+        return out | {"error": str(err), "seconds": round(time.monotonic() - started, 1)}
+    pm = out["pm"] = node_pm(ws)
+    base = shlex.split(pm_command(ws, pm))
+    if pm == "npm":
+        attempts = [["npm", "ci"], ["npm", "install"]] if (ws / "package-lock.json").exists() else [["npm", "install"]]
+    else:
+        attempts = [base + ["install", "--frozen-lockfile"], base + ["install"]]
+    for cmd in attempts:
+        proc = run(cmd, cwd=ws, timeout=timeout)
+        if proc.returncode == 0:
+            out["installed"] = True
+            break
+        out["error"] = proc.stderr[-300:]
+    if out["installed"]:
+        out.pop("error", None)
+    return out | {"seconds": round(time.monotonic() - started, 1)}
 
 
 def run_tests(ws: Path, cmd: str, timeout: int = 1800) -> dict[str, Any]:

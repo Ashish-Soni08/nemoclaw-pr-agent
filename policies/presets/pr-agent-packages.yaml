@@ -1,0 +1,43 @@
+# Egress for installing a target repo's dependencies (Ashish 2026-10-02: JS/TS added).
+# Apply with: nemohermes <sandbox> policy add --from-file policies/presets/pr-agent-packages.yaml --yes
+# Goes with NemoClaw's built-in `pypi` and `npm` presets (install.sh applies both). Those cover
+# pip, node, npm, npx, yarn and pnpm (pnpm runs as node via npx). This file adds the two
+# binaries they don't list: bun (fetched from the npm registry by npx) and the pip of our
+# per-workspace venvs, which are built from Hermes' Python under /opt/hermes.
+# The npm registry needs an L4 tunnel (node's undici uses CONNECT; NemoClaw #2767), as in
+# the built-in npm preset.
+
+preset:
+  name: pr-agent-packages
+  description: "bun via the npm registry; pip from per-workspace venvs (read-only)"
+
+network_policies:
+  pr_agent_bun:
+    name: pr_agent_bun
+    endpoints:
+      - host: registry.npmjs.org
+        port: 443
+        access: full
+        tls: skip
+    binaries:
+      - { path: "/sandbox/.npm/_npx/**/bun" }
+  pr_agent_workspace_pip:
+    name: pr_agent_workspace_pip
+    endpoints:
+      - host: pypi.org
+        port: 443
+        protocol: rest
+        enforcement: enforce
+        rules:
+          - allow: { method: GET, path: "/**" }
+          - allow: { method: HEAD, path: "/**" }
+      - host: files.pythonhosted.org
+        port: 443
+        protocol: rest
+        enforcement: enforce
+        rules:
+          - allow: { method: GET, path: "/**" }
+          - allow: { method: HEAD, path: "/**" }
+    binaries:
+      - { path: "/sandbox/.pr-agent/workspaces/**/.venv-pr-agent/bin/python*" }
+      - { path: "/opt/hermes/.venv/bin/python*" }

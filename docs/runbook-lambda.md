@@ -9,7 +9,7 @@ Items marked **VERIFY** could not be tested from the build session (NemoClaw, Fi
 | Key | Where to get it | Used by |
 | --- | --- | --- |
 | `HF_TOKEN` | huggingface.co, Settings, Access Tokens. Fine-grained, with "Make calls to Inference Providers" and, under Repositories, "Write access to contents/settings of all repos under your personal namespace" (the ledger sync creates and writes the dataset) | Model inference, ledger sync |
-| `GITHUB_TOKEN` | A fine-grained token on the account that will open PRs. Repository access: all repositories. Permissions: Contents, Pull requests, Issues: read and write; Administration: read and write (forking); Metadata: read | Forks, pushes through the API, PRs, comments |
+| `GITHUB_TOKEN` | A classic token with only the `public_repo` scope, ideally on a separate machine account that says it is an AI agent. Not fine-grained: a fine-grained token can only write to repos its owner (you, or an org that approved it) owns, so comments and PRs on other projects get HTTP 403 | Forks, pushes through the API, PRs, comments |
 | `FIRECRAWL_API_KEY` | firecrawl.dev dashboard | Developer Index |
 | `TELEGRAM_BOT_TOKEN`, `TELEGRAM_ALLOWED_IDS` | @BotFather (`/newbot`), and your numeric id from @userinfobot | Run summaries |
 | `LEDGER_DATASET` | A Hugging Face dataset repo name, e.g. `ashish-soni08/pr-agent-ledger`. The first sync creates it, private | The UI reads the ledger from here |
@@ -42,7 +42,7 @@ This onboards a sandbox called `pr-agent` with Nemotron 3 Ultra as the main mode
 
 **VERIFY (model id).** Before installing, check the router serves the menu: `sudo apt-get install -y python3-yaml && HF_TOKEN=$HF_TOKEN bin/pr-agent models`. The main, fix, review and fast rows should say `"served": true`; `candidate` rows are just checked (drop the ones that aren't served, and copy live prices into the menu). If the Ultra id isn't served, use the backup main (GLM-5.3) or another served id from `curl -s -H "Authorization: Bearer $HF_TOKEN" https://router.huggingface.co/v1/models | python3 -m json.tool | grep -i nemotron`, put it in `config/agent.yaml`, and export `PR_AGENT_MAIN_MODEL=<id>` before `install.sh`.
 
-**VERIFY (per-task models).** Fix sub-agents use `delegation.model` (Kimi K2.7 Code by default). If NemoClaw's managed route pins every request to the onboarded model, sub-agents silently run on the main model too. Check after the first run with `nemohermes pr-agent exec -- sqlite3 /sandbox/.hermes/state.db "select model, count(*) from sessions group by 1"`. Either outcome works; the usage guard prices whatever ran.
+**VERIFY (per-task models).** Fix sub-agents use `delegation.model` (Kimi K3 by default). If NemoClaw's managed route pins every request to the onboarded model, sub-agents silently run on the main model too. Check after the first run with `nemohermes pr-agent exec -- sqlite3 /sandbox/.hermes/state.db "select model, count(*) from sessions group by 1"`. Either outcome works; the usage guard prices whatever ran.
 
 **Telegram.** Message your bot once, then send `/sethome` in that chat so cron output has a home channel. Then deploy with `PR_AGENT_DELIVER=telegram scripts/deploy.sh`. Without Telegram, deploy registers the jobs with `deliver=local` (a job whose delivery target isn't connected refuses to run: `blocked_config`).
 

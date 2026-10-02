@@ -45,7 +45,7 @@ Take only when all hold:
 1. The repo's policy continues (discovery already checked) and the issue is still open and unclaimed.
 2. You can name the files the fix touches and the test or repro that proves it.
 3. The fix plausibly fits one PR under the caps (`limits.max_diff_lines`).
-4. The repo's tests can run in the sandbox (pure Python, pip-installable; no Docker-in-Docker, no GPU).
+4. The repo's tests can run in the sandbox: Python (pip-installable) or JavaScript/TypeScript (npm, pnpm, bun or yarn from the npm registry). No Docker-in-Docker, no GPU, no system packages (apt), no other registries.
 
 ## 5. Pick the lane
 

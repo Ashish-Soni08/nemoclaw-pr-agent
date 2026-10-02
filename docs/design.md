@@ -12,7 +12,7 @@ A long-running agent that finds issues in AI, data-science and data-analysis rep
 | --- | --- |
 | Runtime | NemoClaw with the Hermes agent: OpenShell sandbox, Hermes skills, cron, sub-agents, Telegram |
 | Host | Lambda Cloud 1x A10 instance (cheapest available), paused when not demoing (no GPU work) |
-| Models | Hugging Face Inference Providers router, through NemoClaw's managed `inference.local` route. A menu in `config/agent.yaml`: Nemotron 3 Ultra is the main model, Kimi K2.7 Code runs fix sub-agents, GLM-5.3 and DeepSeek V4.1 Flash review, GLM-5.3 Flash does chores |
+| Models | Hugging Face Inference Providers router, through NemoClaw's managed `inference.local` route. A menu in `config/agent.yaml`: GLM-5.3 is the main model, Kimi K3 runs fix sub-agents, GLM-5.3 and DeepSeek V4.1 Flash review, GLM-5.3 Flash does chores |
 | Autonomy | Fully autonomous. No human approves a PR. The self-review gate decides; code enforces the hard limits |
 | Issues | No type restriction. Any issue in a Python AI/data-science repo the agent can genuinely help with; triage decides |
 | PR format | poteto's: Why, Scope, Blast Radius, Verification. Conventional Commits titles |
@@ -35,7 +35,7 @@ The model reads issues, chooses what to take, debugs, writes the fix and the PR 
 
 The method is poteto's (cursor/plugins pstack, MIT): `pr-agent-mode` is a router modeled on poteto-mode. It holds 14 adapted playbooks and 7 principles under `references/`, so Hermes doesn't list them in the skill index and only the router loads them. Task skills (`discover-work`, `check-ai-policy`, `triage-issues`, `claim-issue`, `fix-issue`, `follow-up`) follow Benny's triage and repro-and-fix automations. Tool skills: `self-review-gate`, `systematic-debugging`, `before-and-after`, `evidence-driven-testing`, `make-pr-easy-to-review`, `deslop`, `unslop`, `show-me-your-work`.
 
-Two overrides of poteto: stay strictly inside the issue taken, and the gate decides whether a PR opens. The agent never edits its own skills; it logs `skill.flag` rows for humans.
+Two overrides of poteto: stay strictly inside the issue taken, and the gate decides whether a PR opens. The agent never edits its own skills; it logs `skill.flag` rows for humans. It learns through Hermes memory instead: after a PR outcome, review, claim answer or gate fail it saves a short factual note about the repo, and logs the same note as a `lesson` row so a human can see it.
 
 ## Guardrails
 
