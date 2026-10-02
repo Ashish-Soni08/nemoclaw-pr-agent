@@ -80,13 +80,15 @@ The agent never edits its own skills. If one gives wrong guidance it logs a `ski
 
 All models run through the Hugging Face Inference Providers router. Prices are USD per 1M tokens (input / output) from `config/agent.yaml`.
 
-| Role | Model | Price | Job |
+| Job | Model | Price | What it does |
 | --- | --- | --- | --- |
-| Main | `zai-org/GLM-5.3` | 0.90 / 4.00 | Triage, planning, delegation, gate synthesis, PR text |
-| Fix | `moonshotai/Kimi-K3` | 2.70 / 13.50 | Fix sub-agents: code and tool use |
-| Fix backup | `Qwen/Qwen3-Coder-480B-A35B-Instruct` | 0.38 / 1.55 | Backup fix model |
-| Review | `deepseek-ai/DeepSeek-V4.1-Flash` | 0.20 / 0.60 | Independent review pass, a different model family from the fixer |
-| Fast | `zai-org/GLM-5.3-Flash` | 0.15 / 0.50 | Chores: compression, titles |
+| Main | GLM-5.3 (`zai-org/GLM-5.3`) | 0.90 / 4.00 | Every cron run: triage, sending work to sub-agents, PR text |
+| Fix | Kimi K3 (`moonshotai/Kimi-K3`) | 2.70 / 13.50 | One sub-agent per issue: repro, fix, tests |
+| Fix backup | Qwen3 Coder 480B (`Qwen/Qwen3-Coder-480B-A35B-Instruct`) | 0.38 / 1.55 | Used if Kimi K3 isn't available |
+| Review | DeepSeek V4.1 Flash + GLM-5.3 | 0.20 / 0.60 (DeepSeek) | The two-pass self-review, by a different model family than the fixer |
+| Chores | GLM-5.3 Flash (`zai-org/GLM-5.3-Flash`) | 0.15 / 0.50 | Summarizing context, titles |
+
+Nemotron 3 Ultra was the planned main model, but it failed NemoClaw onboarding (HTTP 400 on Chat Completions), so GLM-5.3 took over. Ultra stays on the candidate list with Kimi K2.7 Code, MiniMax M3, MiMo Pro, Qwen3.8 and Inkling. The agent can't use a model outside this menu.
 
 A usage guard prices every run against this menu and stops the agent once the monthly budget ($400) is spent.
 
