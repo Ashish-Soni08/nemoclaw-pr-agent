@@ -25,8 +25,6 @@ Modeled on Benny's `triage-issue-reports` (cursor/plugins pstack/automations/ben
 
 `pr-agent issue <issue_id>`. Capture: expected vs observed behavior, versions, the error or traceback, a minimal example, whether a maintainer confirmed it, and any comment saying someone is on it (`ambiguous_claims` from discovery are older claims: if the claimer went quiet and a maintainer didn't assign them, you may take it, and say so in `why`).
 
-Its output has `lessons`: what you learned from earlier outcomes, globally and in this repo. Apply them (a repo that closed your docs PRs, a maintainer who wants an issue assigned first) and cite the lesson id in `why` when one decides the verdict.
-
 ## 2. Trace the cause, bounded
 
 Run the **Investigation** playbook. You don't need the full root cause, only enough to say which files a fix touches and how you'd prove it. Use the `precedent_prs` to see how this repo writes fixes and tests.
