@@ -36,4 +36,12 @@ All numbers are computed in `lib/derive.ts` from those two files:
 - **Repos**: the latest `policy` row per repo.
 - **Runs tab**: one row per `run` id. Found = `discover.verify` rows, attempted = issues with `fix.*` rows, passed gate = `gate` rows with result `pass`, merged/closed = `pr.outcome` rows (matched to the run's `pr.opened` by issue). State: `guard`+`skipped` is stopped by budget, `run.end` is finished, otherwise stalled (or failed, if it logged an error) once the newest row is 2 hours old.
 - **Gate rejections**: `gate` rows whose result isn't `pass`, plus `pr.refused` rows, with the `why` as the reason.
-- **Tokens by model**: `ledger/tokens.tsv` (`ts run model tokens_in tokens_out cost_usd`, one row per model per run). The agent doesn't write this file yet; until it does, the panel says so (the sample shows what it will look like).
+- **Run drill-down**: click a run for the settings it started with (`ledger/run_config.tsv`) and, per issue it worked on, which model did each step with tokens and cost (`ledger/tokens.tsv`).
+- **Tokens by model**: sums of `ledger/tokens.tsv`.
+
+Two files the agent doesn't write yet; until it does, those panels say what's missing (the sample shows what they'll look like):
+
+| File | Columns | Written |
+| --- | --- | --- |
+| `tokens.tsv` | `ts run subject step model tokens_in tokens_out cost_usd` | end of each run, one row per (subject, step, model); `subject` is the issue id or `-` for run-wide work like discovery |
+| `run_config.tsv` | `run key value` | at run start: `config` (file @ commit), `model.triage`, `model.fix`, `model.gate`, `model.summary`, limits, `schedule` |

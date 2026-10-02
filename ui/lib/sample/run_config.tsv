@@ -1,0 +1,36 @@
+run	key	value
+r-0929-a	config	config/agent.yaml @ 1cdac1f
+r-0929-a	model.triage	nvidia/Nemotron-Super-49B
+r-0929-a	model.fix	Qwen/Qwen3-Coder-30B
+r-0929-a	model.gate	nvidia/Nemotron-Super-49B
+r-0929-a	model.summary	nvidia/Nemotron-Nano-9B
+r-0929-a	firecrawl.per_run_credits	1000
+r-0929-a	schedule	every 6 h
+r-0929-b	config	config/agent.yaml @ 1cdac1f
+r-0929-b	model.triage	nvidia/Nemotron-Super-49B
+r-0929-b	model.fix	Qwen/Qwen3-Coder-30B
+r-0929-b	model.gate	nvidia/Nemotron-Super-49B
+r-0929-b	model.summary	nvidia/Nemotron-Nano-9B
+r-0929-b	firecrawl.per_run_credits	1000
+r-0929-b	schedule	every 6 h
+r-0930-a	config	config/agent.yaml @ 1cdac1f
+r-0930-a	model.triage	nvidia/Nemotron-Super-49B
+r-0930-a	model.fix	Qwen/Qwen3-Coder-30B
+r-0930-a	model.gate	nvidia/Nemotron-Super-49B
+r-0930-a	model.summary	nvidia/Nemotron-Nano-9B
+r-0930-a	firecrawl.per_run_credits	1000
+r-0930-a	schedule	every 6 h
+r-1001-a	config	config/agent.yaml @ 9dcc1c7
+r-1001-a	model.triage	nvidia/Nemotron-Super-49B
+r-1001-a	model.fix	Qwen/Qwen3-Coder-30B
+r-1001-a	model.gate	nvidia/Nemotron-Super-49B
+r-1001-a	model.summary	nvidia/Nemotron-Nano-9B
+r-1001-a	firecrawl.per_run_credits	1000
+r-1001-a	schedule	every 6 h
+r-1001-b	config	config/agent.yaml @ 9dcc1c7
+r-1001-b	model.triage	nvidia/Nemotron-Super-49B
+r-1001-b	model.fix	Qwen/Qwen3-Coder-30B
+r-1001-b	model.gate	nvidia/Nemotron-Super-49B
+r-1001-b	model.summary	nvidia/Nemotron-Nano-9B
+r-1001-b	firecrawl.per_run_credits	1000
+r-1001-b	schedule	every 6 h

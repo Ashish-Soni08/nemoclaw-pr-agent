@@ -125,7 +125,7 @@ export function Dashboard({ view }: { view: View }) {
         </TabsContent>
 
         <TabsContent value="runs">
-          <RunsPanel runs={view.runs} rejections={view.rejections} models={view.models} tokensMissing={view.tokensFromSample} />
+          <RunsPanel runs={view.runs} rejections={view.rejections} models={view.models} tokensFromSample={view.tokensFromSample} />
         </TabsContent>
 
         <TabsContent value="repos">

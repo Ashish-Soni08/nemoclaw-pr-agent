@@ -24,20 +24,27 @@ export type Spend = {
   source: string;
 };
 
-// tokens.tsv: one row per model per run. Proposed to the agent; not written by it yet.
+// tokens.tsv: one row per model per step (per issue where there is one) per run.
+// Proposed to the agent; not written by it yet.
 export type TokenRow = {
   ts: string;
   run: string;
+  subject: string;
+  step: string;
   model: string;
   tokens_in: number;
   tokens_out: number;
   cost_usd: number;
 };
 
+// run_config.tsv: the settings each run started with, one key per row. Also proposed.
+export type ConfigRow = { run: string; key: string; value: string };
+
 export type Ledger = {
   decisions: Decision[];
   spend: Spend[];
   tokens: TokenRow[];
+  config: ConfigRow[];
   origin: { kind: "dataset"; dataset: string } | { kind: "sample" };
   fetchedAt: string;
 };
@@ -88,6 +95,8 @@ function toTokens(text: string): TokenRow[] {
   return parseTsv(text).map((r) => ({
     ts: r.ts,
     run: r.run,
+    subject: r.subject || "-",
+    step: r.step || "-",
     model: r.model,
     tokens_in: num(r.tokens_in) ?? 0,
     tokens_out: num(r.tokens_out) ?? 0,
@@ -115,11 +124,13 @@ async function fromSample(file: string): Promise<string> {
 export async function loadLedger(): Promise<Ledger> {
   const dataset = process.env.LEDGER_DATASET?.replace(/^datasets\//, "").replace(/\/+$/, "");
   const read = dataset ? (f: string) => fromDataset(dataset, f) : fromSample;
-  const [d, s, t] = await Promise.all([read("decisions.tsv"), read("spend.tsv"), read("tokens.tsv").catch(() => "")]);
+  const optional = (f: string) => read(f).catch(() => "");
+  const [d, s, t, c] = await Promise.all([read("decisions.tsv"), read("spend.tsv"), optional("tokens.tsv"), optional("run_config.tsv")]);
   return {
     decisions: toDecisions(d),
     spend: toSpend(s),
     tokens: toTokens(t),
+    config: parseTsv(c).map((r) => ({ run: r.run, key: r.key, value: r.value })),
     origin: dataset ? { kind: "dataset", dataset } : { kind: "sample" },
     fetchedAt: new Date().toISOString(),
   };

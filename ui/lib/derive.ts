@@ -1,4 +1,4 @@
-import type { Decision, Ledger, Spend, TokenRow } from "./ledger";
+import type { ConfigRow, Decision, Ledger, Spend, TokenRow } from "./ledger";
 
 // Everything the page shows is computed here from the two ledger files, so the
 // page can never show something the agent did not log.
@@ -49,7 +49,13 @@ export type RunRow = {
   rejected: number;
   tokens: number | null;
   costUsd: number | null;
+  config: { key: string; value: string }[];
+  issues: IssueWork[];
 };
+
+export type StepUse = { step: string; model: string; tokens: number; costUsd: number; result: string | null };
+
+export type IssueWork = { subject: string; outcome: string; tone: "ok" | "info" | "bad" | "warn" | "muted"; steps: StepUse[]; costUsd: number | null };
 
 export type Rejection = { ts: string; run: string; subject: string; phase: string; reason: string; evidence: string };
 
@@ -209,7 +215,38 @@ function history(spend: Spend[], entries: Entry[], now: string): DayTotals[] {
 // (a crash, or a prompt waiting for approval that never comes).
 const STALL_MS = 2 * 60 * 60 * 1000;
 
-function runs(entries: Entry[], tokens: TokenRow[], now: string): RunRow[] {
+// Order steps the way the pipeline runs them.
+const STEP_ORDER = ["discover", "triage", "claim", "fix", "gate", "follow-up", "summary"];
+const stepRank = (s: string) => (STEP_ORDER.indexOf(s) + 1 || 99);
+
+function issueWork(run: string, rows: Entry[], tokens: TokenRow[], outcomes: Entry[]): IssueWork[] {
+  // Issues the run did real work on: chosen in triage, claimed, or fixed.
+  const subjects = [...new Set(rows.filter((e) => (e.phase === "triage" && e.result === "take") || e.phase.startsWith("fix.") || e.phase === "claim.posted" || e.phase === "gate").map((e) => e.subject))];
+  return subjects.map((subject) => {
+    const mine = rows.filter((e) => e.subject === subject);
+    const has = (phase: string) => mine.find((e) => e.phase === phase);
+    const opened = has("pr.opened");
+    const merged = opened && outcomes.find((o) => o.subject === subject && o.result === "merged");
+    const closed = opened && outcomes.find((o) => o.subject === subject && o.result === "closed");
+    const gate = mine.findLast((e) => e.phase === "gate");
+    let outcome = "in progress";
+    let tone: IssueWork["tone"] = "muted";
+    if (merged) [outcome, tone] = [merged.decision, "ok"];
+    else if (closed) [outcome, tone] = [closed.decision, "warn"];
+    else if (opened) [outcome, tone] = [opened.decision, "info"];
+    else if (gate && gate.result !== "pass") [outcome, tone] = ["rejected by gate", "bad"];
+    else if (has("pr.refused")) [outcome, tone] = ["PR refused", "bad"];
+    else if (has("fix.abandoned")) [outcome, tone] = ["fix abandoned", "warn"];
+    else if (has("claim.posted")) [outcome, tone] = ["claim waiting", "info"];
+    const t = tokens.filter((x) => x.run === run && x.subject === subject);
+    const steps = t
+      .map((x) => ({ step: x.step, model: x.model, tokens: x.tokens_in + x.tokens_out, costUsd: x.cost_usd, result: x.step === "gate" && gate ? gate.result : null }))
+      .sort((a, b) => stepRank(a.step) - stepRank(b.step));
+    return { subject, outcome, tone, steps, costUsd: t.length ? t.reduce((a, x) => a + x.cost_usd, 0) : null };
+  });
+}
+
+function runs(entries: Entry[], tokens: TokenRow[], config: ConfigRow[], now: string): RunRow[] {
   const ids = [...new Set(entries.map((e) => e.run).filter(Boolean))];
   // pr.outcome rows can land in a later run than the PR, so match them by issue.
   const outcomes = entries.filter((e) => e.phase === "pr.outcome");
@@ -244,6 +281,8 @@ function runs(entries: Entry[], tokens: TokenRow[], now: string): RunRow[] {
         rejected: by("gate").filter((e) => e.result !== "pass").length + by("pr.refused").filter((e) => !by("gate").some((g) => g.subject === e.subject && g.result !== "pass")).length,
         tokens: t.length ? t.reduce((a, x) => a + x.tokens_in + x.tokens_out, 0) : null,
         costUsd: t.length ? t.reduce((a, x) => a + x.cost_usd, 0) : null,
+        config: config.filter((c) => c.run === run).map(({ key, value }) => ({ key, value })),
+        issues: issueWork(run, rows, tokens, outcomes),
       };
     })
     .sort((a, b) => b.started.localeCompare(a.started));
@@ -305,7 +344,7 @@ export function derive(ledger: Ledger): View {
   const now = ledger.origin.kind === "sample" && latest ? latest : ledger.fetchedAt;
   const days = [...new Set(entries.map((e) => e.day))].sort().reverse();
   const stagesByDay = Object.fromEntries(days.map((d) => [d, stages(entries.filter((e) => e.day === d))]));
-  const runRows = runs(entries, ledger.tokens, now);
+  const runRows = runs(entries, ledger.tokens, ledger.config, now);
   return {
     origin: ledger.origin,
     fetchedAt: ledger.fetchedAt,

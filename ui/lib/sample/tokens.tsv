@@ -1,11 +1,20 @@
-ts	run	model	tokens_in	tokens_out	cost_usd
-2026-09-29T14:03:55Z	r-0929-b	nvidia/Nemotron-Super-49B	182400	9100	0.21
-2026-09-30T09:24:00Z	r-0930-a	nvidia/Nemotron-Super-49B	1420000	61000	1.62
-2026-09-30T09:24:00Z	r-0930-a	Qwen/Qwen3-Coder-30B	2310000	118000	2.43
-2026-09-30T09:24:00Z	r-0930-a	nvidia/Nemotron-Nano-9B	640000	22000	0.11
-2026-10-01T12:21:30Z	r-1001-a	nvidia/Nemotron-Super-49B	1180000	47000	1.34
-2026-10-01T12:21:30Z	r-1001-a	Qwen/Qwen3-Coder-30B	1760000	91000	1.86
-2026-10-01T12:21:30Z	r-1001-a	nvidia/Nemotron-Nano-9B	820000	30000	0.14
-2026-10-01T15:43:20Z	r-1001-b	nvidia/Nemotron-Super-49B	960000	38000	1.09
-2026-10-01T15:43:20Z	r-1001-b	Qwen/Qwen3-Coder-30B	2050000	104000	2.17
-2026-10-01T15:43:20Z	r-1001-b	nvidia/Nemotron-Nano-9B	410000	15000	0.07
+ts	run	subject	step	model	tokens_in	tokens_out	cost_usd
+2026-09-29T14:03:55Z	r-0929-b	plotwise/plotwise#80	triage	nvidia/Nemotron-Super-49B	182400	9100	0.21
+2026-09-30T08:06:30Z	r-0930-a	tabular-labs/frameframe#1188	triage	nvidia/Nemotron-Super-49B	52000	3000	0.06
+2026-09-30T09:20:31Z	r-0930-a	tabular-labs/frameframe#1188	fix	Qwen/Qwen3-Coder-30B	1400000	80000	1.53
+2026-09-30T09:22:02Z	r-0930-a	tabular-labs/frameframe#1188	gate	nvidia/Nemotron-Super-49B	200000	10000	0.24
+2026-09-30T09:24:00Z	r-0930-a	-	discover	nvidia/Nemotron-Super-49B	1168000	48000	1.32
+2026-09-30T09:24:00Z	r-0930-a	-	summary	nvidia/Nemotron-Nano-9B	640000	22000	0.11
+2026-10-01T08:11:15Z	r-1001-a	vecstore-ai/embedkit#342	triage	nvidia/Nemotron-Super-49B	58000	3000	0.07
+2026-10-01T08:42:30Z	r-1001-a	vecstore-ai/embedkit#342	fix	Qwen/Qwen3-Coder-30B	610000	31000	0.64
+2026-10-01T12:21:30Z	r-1001-a	-	discover	nvidia/Nemotron-Super-49B	1122000	44000	1.27
+2026-10-01T12:21:30Z	r-1001-a	-	follow-up	Qwen/Qwen3-Coder-30B	1150000	60000	1.22
+2026-10-01T12:21:30Z	r-1001-a	-	summary	nvidia/Nemotron-Nano-9B	820000	30000	0.14
+2026-10-01T14:02:05Z	r-1001-b	tabular-labs/frameframe#1215	triage	nvidia/Nemotron-Super-49B	60000	2000	0.07
+2026-10-01T14:46:55Z	r-1001-b	tabular-labs/frameframe#1215	fix	Qwen/Qwen3-Coder-30B	1150000	60000	1.21
+2026-10-01T14:48:01Z	r-1001-b	tabular-labs/frameframe#1215	gate	nvidia/Nemotron-Super-49B	172000	8000	0.21
+2026-10-01T15:20:10Z	r-1001-b	gridstat/gridstat#21	triage	nvidia/Nemotron-Super-49B	46000	2000	0.05
+2026-10-01T15:41:30Z	r-1001-b	gridstat/gridstat#21	fix	Qwen/Qwen3-Coder-30B	900000	44000	0.96
+2026-10-01T15:43:02Z	r-1001-b	gridstat/gridstat#21	gate	nvidia/Nemotron-Super-49B	144000	6000	0.17
+2026-10-01T15:43:20Z	r-1001-b	-	discover	nvidia/Nemotron-Super-49B	538000	22000	0.59
+2026-10-01T15:43:20Z	r-1001-b	-	summary	nvidia/Nemotron-Nano-9B	410000	15000	0.07
