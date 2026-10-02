@@ -88,6 +88,8 @@ All models run through the Hugging Face Inference Providers router. Prices are U
 | Review | DeepSeek V4.1 Flash + GLM-5.3 | 0.20 / 0.60 (DeepSeek) | The two-pass self-review, by a different model family than the fixer |
 | Chores | GLM-5.3 Flash (`zai-org/GLM-5.3-Flash`) | 0.15 / 0.50 | Summarizing context, titles |
 
+**Today every role runs on GLM-5.3.** NemoClaw's model route sends every request to the model the sandbox was set up with, so per-role routing is configured but not yet active.
+
 Nemotron 3 Ultra was the planned main model, but it failed NemoClaw onboarding (HTTP 400 on Chat Completions), so GLM-5.3 took over. Ultra stays on the candidate list with Kimi K2.7 Code, MiniMax M3, MiMo Pro, Qwen3.8 and Inkling. The agent can't use a model outside this menu.
 
 A usage guard prices every run against this menu and stops the agent once the monthly budget ($400) is spent.
