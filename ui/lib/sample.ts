@@ -1,4 +1,7 @@
-ts	run	phase	subject	decision	why	evidence	result
+// Sample ledger shown when LEDGER_DATASET is unset. Bundled as code so it loads
+// regardless of the server's working directory.
+export const SAMPLE: Record<string, string> = {
+  "decisions.tsv": `ts	run	phase	subject	decision	why	evidence	result
 2026-09-29T08:00:02Z	r-0929-a	start	r-0929-a	started scheduled run	cron tick	host=lambda-a10	open
 2026-09-29T08:00:09Z	r-0929-a	guard	usage	skipped run	Firecrawl per-run backstop already reached by a retry loop	state.db	skipped
 2026-09-29T14:00:03Z	r-0929-b	start	r-0929-b	started scheduled run	cron tick	host=lambda-a10	open
@@ -59,3 +62,89 @@ ts	run	phase	subject	decision	why	evidence	result
 2026-10-01T15:41:30Z	r-1001-b	fix.test.after	gridstat/gridstat#21	ran pytest -q	after run	41 passed in 12s	exit 0
 2026-10-01T15:43:02Z	r-1001-b	gate	gridstat/gridstat#21	self-review gate fail	diff also reformats 3 unrelated files; the new test does not fail before the fix	diff 5aa0c2	fail
 2026-10-01T15:43:20Z	r-1001-b	pr.refused	gridstat/gridstat#21	did not open PR	self-review gate failed	/sandbox/work/gridstat-21	refused
+`,
+  "spend.tsv": `ts	provider	used	unit	cost_usd	remaining	limit	source
+2026-09-25T20:00:00Z	huggingface	2.1	usd	2.1	397.9	400	estimate:hermes-state.db x menu prices (month to date)
+2026-09-25T20:00:00Z	firecrawl	180	credits	0	69820	70000	local:firecrawl_credits.tsv (month to date)
+2026-09-25T20:00:00Z	lambda	0	hours	0	500	500	estimate:uptime x hourly rate (all boots)
+2026-09-26T20:00:00Z	huggingface	6.85	usd	6.85	393.15	400	estimate:hermes-state.db x menu prices (month to date)
+2026-09-26T20:00:00Z	firecrawl	610	credits	0	69390	70000	local:firecrawl_credits.tsv (month to date)
+2026-09-26T20:00:00Z	lambda	0	hours	0	500	500	estimate:uptime x hourly rate (all boots)
+2026-09-27T20:00:00Z	huggingface	13.4	usd	13.4	386.6	400	estimate:hermes-state.db x menu prices (month to date)
+2026-09-27T20:00:00Z	firecrawl	1020	credits	0	68980	70000	local:firecrawl_credits.tsv (month to date)
+2026-09-27T20:00:00Z	lambda	0	hours	0	500	500	estimate:uptime x hourly rate (all boots)
+2026-09-28T20:00:00Z	huggingface	19	usd	19	381	400	estimate:hermes-state.db x menu prices (month to date)
+2026-09-28T20:00:00Z	firecrawl	1490	credits	0	68510	70000	local:firecrawl_credits.tsv (month to date)
+2026-09-28T20:00:00Z	lambda	1	hours	1.29	498.71	500	estimate:uptime x hourly rate (all boots)
+2026-09-29T20:00:00Z	huggingface	29.2	usd	29.2	370.8	400	estimate:hermes-state.db x menu prices (month to date)
+2026-09-29T20:00:00Z	firecrawl	2210	credits	0	67790	70000	local:firecrawl_credits.tsv (month to date)
+2026-09-29T20:00:00Z	lambda	9.5	hours	12.255	487.745	500	estimate:uptime x hourly rate (all boots)
+2026-09-30T09:24:00Z	huggingface	38.6	usd	38.6	361.4	400	estimate:hermes-state.db x menu prices (month to date)
+2026-09-30T09:24:00Z	firecrawl	2840	credits	0	67160	70000	local:firecrawl_credits.tsv (month to date)
+2026-09-30T09:24:00Z	lambda	17	hours	21.93	478.07	500	estimate:uptime x hourly rate (all boots)
+2026-10-01T12:21:30Z	huggingface	4.05	usd	4.05	395.95	400	estimate:hermes-state.db x menu prices (month to date)
+2026-10-01T12:21:30Z	firecrawl	520	credits	0	69480	70000	api:/v2/team/credit-usage (remaining); local (used)
+2026-10-01T12:21:30Z	lambda	26.5	hours	34.185	465.815	500	estimate:uptime x hourly rate (all boots)
+2026-10-01T14:49:12Z	huggingface	6.45	usd	6.45	393.55	400	estimate:hermes-state.db x menu prices (month to date)
+2026-10-01T14:49:12Z	firecrawl	830	credits	0	69170	70000	api:/v2/team/credit-usage (remaining); local (used)
+2026-10-01T14:49:12Z	lambda	29	hours	37.41	462.59	500	estimate:uptime x hourly rate (all boots)
+`,
+  "tokens.tsv": `ts	run	subject	step	model	tokens_in	tokens_out	cost_usd
+2026-09-29T14:03:55Z	r-0929-b	plotwise/plotwise#80	triage	nvidia/Nemotron-Super-49B	182400	9100	0.21
+2026-09-30T08:06:30Z	r-0930-a	tabular-labs/frameframe#1188	triage	nvidia/Nemotron-Super-49B	52000	3000	0.06
+2026-09-30T09:20:31Z	r-0930-a	tabular-labs/frameframe#1188	fix	Qwen/Qwen3-Coder-30B	1400000	80000	1.53
+2026-09-30T09:22:02Z	r-0930-a	tabular-labs/frameframe#1188	gate	nvidia/Nemotron-Super-49B	200000	10000	0.24
+2026-09-30T09:24:00Z	r-0930-a	-	discover	nvidia/Nemotron-Super-49B	1168000	48000	1.32
+2026-09-30T09:24:00Z	r-0930-a	-	summary	nvidia/Nemotron-Nano-9B	640000	22000	0.11
+2026-10-01T08:11:15Z	r-1001-a	vecstore-ai/embedkit#342	triage	nvidia/Nemotron-Super-49B	58000	3000	0.07
+2026-10-01T08:42:30Z	r-1001-a	vecstore-ai/embedkit#342	fix	Qwen/Qwen3-Coder-30B	610000	31000	0.64
+2026-10-01T12:21:30Z	r-1001-a	-	discover	nvidia/Nemotron-Super-49B	1122000	44000	1.27
+2026-10-01T12:21:30Z	r-1001-a	-	follow-up	Qwen/Qwen3-Coder-30B	1150000	60000	1.22
+2026-10-01T12:21:30Z	r-1001-a	-	summary	nvidia/Nemotron-Nano-9B	820000	30000	0.14
+2026-10-01T14:02:05Z	r-1001-b	tabular-labs/frameframe#1215	triage	nvidia/Nemotron-Super-49B	60000	2000	0.07
+2026-10-01T14:46:55Z	r-1001-b	tabular-labs/frameframe#1215	fix	Qwen/Qwen3-Coder-30B	1150000	60000	1.21
+2026-10-01T14:48:01Z	r-1001-b	tabular-labs/frameframe#1215	gate	nvidia/Nemotron-Super-49B	172000	8000	0.21
+2026-10-01T15:20:10Z	r-1001-b	gridstat/gridstat#21	triage	nvidia/Nemotron-Super-49B	46000	2000	0.05
+2026-10-01T15:41:30Z	r-1001-b	gridstat/gridstat#21	fix	Qwen/Qwen3-Coder-30B	900000	44000	0.96
+2026-10-01T15:43:02Z	r-1001-b	gridstat/gridstat#21	gate	nvidia/Nemotron-Super-49B	144000	6000	0.17
+2026-10-01T15:43:20Z	r-1001-b	-	discover	nvidia/Nemotron-Super-49B	538000	22000	0.59
+2026-10-01T15:43:20Z	r-1001-b	-	summary	nvidia/Nemotron-Nano-9B	410000	15000	0.07
+`,
+  "run_config.tsv": `run	key	value
+r-0929-a	config	config/agent.yaml @ 1cdac1f
+r-0929-a	model.triage	nvidia/Nemotron-Super-49B
+r-0929-a	model.fix	Qwen/Qwen3-Coder-30B
+r-0929-a	model.gate	nvidia/Nemotron-Super-49B
+r-0929-a	model.summary	nvidia/Nemotron-Nano-9B
+r-0929-a	firecrawl.per_run_credits	1000
+r-0929-a	schedule	every 6 h
+r-0929-b	config	config/agent.yaml @ 1cdac1f
+r-0929-b	model.triage	nvidia/Nemotron-Super-49B
+r-0929-b	model.fix	Qwen/Qwen3-Coder-30B
+r-0929-b	model.gate	nvidia/Nemotron-Super-49B
+r-0929-b	model.summary	nvidia/Nemotron-Nano-9B
+r-0929-b	firecrawl.per_run_credits	1000
+r-0929-b	schedule	every 6 h
+r-0930-a	config	config/agent.yaml @ 1cdac1f
+r-0930-a	model.triage	nvidia/Nemotron-Super-49B
+r-0930-a	model.fix	Qwen/Qwen3-Coder-30B
+r-0930-a	model.gate	nvidia/Nemotron-Super-49B
+r-0930-a	model.summary	nvidia/Nemotron-Nano-9B
+r-0930-a	firecrawl.per_run_credits	1000
+r-0930-a	schedule	every 6 h
+r-1001-a	config	config/agent.yaml @ 9dcc1c7
+r-1001-a	model.triage	nvidia/Nemotron-Super-49B
+r-1001-a	model.fix	Qwen/Qwen3-Coder-30B
+r-1001-a	model.gate	nvidia/Nemotron-Super-49B
+r-1001-a	model.summary	nvidia/Nemotron-Nano-9B
+r-1001-a	firecrawl.per_run_credits	1000
+r-1001-a	schedule	every 6 h
+r-1001-b	config	config/agent.yaml @ 9dcc1c7
+r-1001-b	model.triage	nvidia/Nemotron-Super-49B
+r-1001-b	model.fix	Qwen/Qwen3-Coder-30B
+r-1001-b	model.gate	nvidia/Nemotron-Super-49B
+r-1001-b	model.summary	nvidia/Nemotron-Nano-9B
+r-1001-b	firecrawl.per_run_credits	1000
+r-1001-b	schedule	every 6 h
+`,
+};

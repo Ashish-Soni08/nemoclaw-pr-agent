@@ -16,7 +16,7 @@ npm install
 npm run dev
 ```
 
-Without `LEDGER_DATASET` the page shows the sample ledger in `lib/sample/` and says so in the header.
+Without `LEDGER_DATASET` the page shows the sample ledger in `lib/sample.ts` and says so in the header.
 
 | Env var | Purpose |
 | --- | --- |

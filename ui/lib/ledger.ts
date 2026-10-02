@@ -1,5 +1,4 @@
-import { readFile } from "node:fs/promises";
-import path from "node:path";
+import { SAMPLE } from "./sample";
 
 // Shapes written by the agent (src/pr_agent/ledger.py and spend.py).
 export type Decision = {
@@ -118,7 +117,7 @@ async function fromDataset(dataset: string, file: string): Promise<string> {
 }
 
 async function fromSample(file: string): Promise<string> {
-  return readFile(path.join(process.cwd(), "lib", "sample", file), "utf8");
+  return SAMPLE[file] ?? "";
 }
 
 export async function loadLedger(): Promise<Ledger> {

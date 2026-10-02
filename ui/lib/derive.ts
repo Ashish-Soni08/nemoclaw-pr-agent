@@ -110,7 +110,10 @@ function stages(rows: Decision[]): Stage[] {
   const takes = by("triage", "take");
   const skips = by("triage", "skip");
   const claims = by("claim.posted");
-  const fixesStarted = new Set(rows.filter((r) => r.phase.startsWith("fix.")).map((r) => r.subject));
+  const fixed = new Set(rows.filter((r) => r.phase.startsWith("fix.")).map((r) => r.subject));
+  // An issue claimed and then fixed the same day is one issue worked on, and no longer waiting.
+  const worked = new Set([...fixed, ...claims.map((c) => c.subject)]);
+  const waiting = claims.filter((c) => !fixed.has(c.subject)).length;
   const abandoned = by("fix.abandoned");
   const opened = by("pr.opened");
   const refused = by("pr.refused");
@@ -119,7 +122,7 @@ function stages(rows: Decision[]): Stage[] {
     { key: "kept", label: "Still open", count: kept.length, note: "unassigned, no open PR", phases: ["discover.verify"] },
     { key: "policy", label: "Repos allow AI", count: allowed.length, note: notAllowed || `of ${policy.length} repos checked`, phases: ["policy"] },
     { key: "triage", label: "Chosen", count: takes.length, note: `${skips.length} skipped in triage`, phases: ["triage"] },
-    { key: "work", label: "Worked on", count: fixesStarted.size + claims.length, note: `${claims.length} claim${claims.length === 1 ? "" : "s"} waiting · ${abandoned.length} abandoned`, phases: ["claim.posted", "claim.status", "fix.workspace", "fix.setup", "fix.test.baseline", "fix.test.after", "fix.abandoned", "gate"] },
+    { key: "work", label: "Worked on", count: worked.size, note: `${waiting} claim${waiting === 1 ? "" : "s"} waiting · ${abandoned.length} abandoned`, phases: ["claim.posted", "claim.status", "fix.workspace", "fix.setup", "fix.test.baseline", "fix.test.after", "fix.abandoned", "gate"] },
     { key: "pr", label: "PRs opened", count: opened.length, note: refused.length ? `${refused.length} refused by the gate` : "after the self-review gate", phases: ["pr.opened", "pr.refused", "follow-up.reply", "follow-up.push", "follow-up.ack"] },
   ];
 }
