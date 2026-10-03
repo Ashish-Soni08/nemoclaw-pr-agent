@@ -230,8 +230,10 @@ def test_refuses_body_that_would_hide_the_disclosure(ws, tmp_path):
     fix(ws)
     record_gate(ws, "pass", "no findings", ["thermo", "security"])
     for trick in ("<!-- hidden", "--> <!-- hidden", "~~~\nhidden", "````\nhidden", "</details><details>",
-                  "````\n```\nhidden", "~~~\n```\nhidden", "<details>\n<details>x</details>"):
-        with pytest.raises(Refused, match="unclosed"):
+                  "````\n```\nhidden", "~~~\n```\nhidden", "<details>\n<details>x</details>",
+                  "<details>\n```\n</details>\n```\nhidden", "```\n<!--\n```\n-->\nhidden",
+                  "<div>\n```\n</div>\n\n```\nhidden", "<!-- x -->"):
+        with pytest.raises(Refused, match="raw HTML"):
             preflight(ws, ALLOW, Registry(tmp_path), LIMITS, "fix(pkg): add numbers", BODY + trick)
 
 
@@ -243,7 +245,7 @@ def test_one_open_pr_per_repo_ignores_case(tmp_path):
 
 def test_balanced_markup_is_fine():
     from pr_agent.publish import leaves_open
-    ok = "```py\nx = 1\n```\n<details><summary>log</summary>\n\n````\n```\n````\n</details>\n<!-- note -->\n"
+    ok = "```py\nx = 1\n```\n\n````\n```\n<!-- literal -->\n<details>\n````\nUse `a < b` here.\n"
     assert not leaves_open(ok)
-    # Inside an HTML block GitHub renders fence lines as raw text, so markup there still counts.
+    # Inside an HTML block GitHub renders fence lines as raw text, so any raw HTML counts.
     assert leaves_open("<div>\n```\n<details>\n```\n</div>\n")

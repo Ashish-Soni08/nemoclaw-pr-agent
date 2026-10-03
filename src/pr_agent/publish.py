@@ -98,20 +98,25 @@ def check_body(body: str) -> None:
     # The full AI disclosure goes after the body; anything left open here would swallow it.
     # (A one-line disclosure also goes first, where nothing in the body can hide it.)
     if leaves_open(body):
-        raise Refused("PR body has an unclosed comment, code fence or <details> block")
+        raise Refused("PR body has raw HTML (a comment, <details> or HTML block) or an unclosed code fence; "
+                      "write plain Markdown and close every fence")
 
 
 FENCE = re.compile(r" {0,3}(`{3,}|~{3,})(.*)$")
-TAG = re.compile(r"<!--|-->|<details\b|</details\s*>", re.I)
+# Anything that starts HTML GitHub would render: comments, <details> anywhere on a line, and
+# every CommonMark HTML block opener (a tag, <!..., <?...) at the start of a line.
+HTML = re.compile(r"<!--|-->|</?details\b|^ {0,3}<[A-Za-z/!?]", re.I)
 
 
 def leaves_open(body: str) -> bool:
     """Would anything appended after `body` render inside a code fence, comment or <details>?
 
-    Deliberately conservative: comments and <details> are tracked over the whole text, fenced
-    or not, because inside an HTML block GitHub treats fence lines as raw text. Fences follow
-    CommonMark: a closer uses the opener's character, at least as many, and nothing after.
-    A false alarm only means the model rewrites the body."""
+    One pass, deliberately strict. Fences follow CommonMark: a closer uses the opener's
+    character, at least as many, and nothing after. Outside fences no raw HTML is allowed at
+    all, since an HTML block turns fence lines into raw text and an open comment or <details>
+    hides what follows; tracking the two separately let one construct's closer cancel the
+    other's opener. Inside a fence everything is literal, so HTML there is fine. A false
+    alarm only means the model rewrites the body in plain Markdown."""
     fence: str | None = None
     for line in body.splitlines():
         m = FENCE.match(line)
@@ -120,19 +125,9 @@ def leaves_open(body: str) -> bool:
                 fence = None
         elif m and not (m.group(1)[0] == "`" and "`" in m.group(2)):
             fence = m.group(1)
-    in_comment, details = False, 0
-    for line in body.splitlines():
-        for tok in TAG.findall(line):
-            tok = tok.lower()
-            if in_comment:
-                in_comment = tok != "-->"
-            elif tok == "<!--":
-                in_comment = True
-            elif tok.startswith("<details"):
-                details += 1
-            elif tok.startswith("</details"):
-                details = max(details - 1, 0)
-    return fence is not None or in_comment or details > 0
+        elif HTML.search(line):
+            return True
+    return fence is not None
 
 
 HEADER = "> Written by an autonomous AI agent ([nemoclaw-pr-agent](https://github.com/Ashish-Soni08/nemoclaw-pr-agent)); details at the end.\n\n"
