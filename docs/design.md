@@ -12,7 +12,7 @@ A long-running agent that finds issues in AI, data-science and data-analysis rep
 | --- | --- |
 | Runtime | NemoClaw with the Hermes agent: OpenShell sandbox, Hermes skills, cron, sub-agents, Telegram |
 | Host | Lambda Cloud 1x A10 instance (cheapest available), paused when not demoing (no GPU work) |
-| Models | Hugging Face Inference Providers router, through NemoClaw's managed `inference.local` route. A menu in `config/agent.yaml`: GLM-5.3 is the main model, Kimi K3 runs fix sub-agents, GLM-5.3 and DeepSeek V4.1 Flash review, GLM-5.3 Flash does chores |
+| Models | Hugging Face Inference Providers router, through NemoClaw's managed `inference.local` route. A menu in `config/agent.yaml`: GLM-5.3 is the main model, Qwen3 Coder 480B runs fix sub-agents (Kimi K3 backup), GLM-5.3 and DeepSeek V4.1 Flash review, GLM-5.3 Flash does chores |
 | Autonomy | Fully autonomous. No human approves a PR. The self-review gate decides; code enforces the hard limits |
 | Issues | No type restriction. Any issue in a Python AI/data-science repo the agent can genuinely help with; triage decides |
 | PR format | poteto's: Why, Scope, Blast Radius, Verification. Conventional Commits titles |
