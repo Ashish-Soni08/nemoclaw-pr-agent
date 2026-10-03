@@ -17,4 +17,7 @@ if [[ "$PY" == /sandbox/.pr-agent/bin/python ]]; then
   # A copied interpreter doesn't find the system site-packages (PyYAML) on its own.
   PYTHONPATH="$PYTHONPATH:$(python3 -c 'import sys; print(":".join(p for p in sys.path[1:] if p))')"
 fi
-exec "$PY" -m pr_agent.cli "$@"
+# Not `python -m`: that puts the current directory first on sys.path, so running pr-agent from
+# inside a workspace would import that repo's own pr_agent/ or yaml.py into the interpreter
+# the keys are injected for. Drop it before anything is imported.
+exec "$PY" -c 'import sys; sys.path[:] = [p for p in sys.path if p not in ("", ".")]; sys.argv[0] = "pr-agent"; from pr_agent.cli import main; sys.exit(main())' "$@"

@@ -34,7 +34,10 @@ AGENT_FILES = ["AGENTS.md", "CLAUDE.md", ".cursorrules", ".github/copilot-instru
 
 AI = r"(?:\bai\b|a\.i\.|\bllms?\b|chatgpt|copilot|claude|language models?|machine[- ]generated|generated (?:code|content|contributions?|pull requests?)|automated (?:pull requests?|contributions?)|agents?\b)"
 BAN = [
-    re.compile(rf"(?:do not|don't|will not|won't|cannot|can't|does not|doesn't|no longer|not)\s+(?:\w+\s+){{0,3}}(?:accept|allow|permit|welcome|merge|review)\w*[^.\n]{{0,80}}{AI}", re.I),
+    re.compile(rf"(?:do not|don't|will not|won't|cannot|can't|does not|doesn't|no longer|not)\s+(?:\w+\s+){{0,3}}(?:accept|allow|permit|welcome|merge|review|want|tolerate|take)\w*[^.\n]{{0,80}}{AI}", re.I),
+    # "No AI-generated code." as a sentence or list item of its own.
+    re.compile(rf"(?:^|(?<=[.!?:] )|(?<=[-*] ))no\s+{AI}", re.I | re.M),
+    re.compile(rf"(?:refrain from|avoid|please (?:do not|don't|never))\s+(?:\w+\s+){{0,2}}(?:submit|send|open|us|contribut)\w*[^.\n]{{0,60}}{AI}", re.I),
     re.compile(rf"{AI}[^.\n]{{0,80}}(?:not (?:be )?(?:accepted|allowed|permitted|welcome)|will be (?:closed|rejected)|(?:are|is) (?:prohibited|banned|forbidden))", re.I),
     re.compile(rf"(?:prohibit|ban|forbid|reject)\w*[^.\n]{{0,60}}{AI}", re.I),
 ]
@@ -109,16 +112,21 @@ def blocked(cache_dir: Path) -> dict[str, dict[str, str]]:
     return read_json(cache_dir / "blocked.json", {})
 
 
+def is_blocked(cache_dir: Path, repo: str) -> dict[str, str] | None:
+    """GitHub repo names are case-insensitive, so the block list is too."""
+    return {k.lower(): v for k, v in blocked(cache_dir).items()}.get(repo.lower())
+
+
 def block(cache_dir: Path, repo: str, why: str, evidence: str) -> None:
     """A maintainer said no to AI contributions. Permanent: no cache expiry or re-check undoes it."""
     repos = blocked(cache_dir)
-    if repo not in repos:
+    if not is_blocked(cache_dir, repo):
         repos[repo] = {"why": why, "evidence": evidence, "at": datetime.now(timezone.utc).isoformat(timespec="seconds")}
         write_json(cache_dir / "blocked.json", repos)
 
 
 def check(gh: GitHub, repo: str, cache_dir: Path, ttl_days: int = 30, refresh: bool = False) -> PolicyVerdict:
-    stop = blocked(cache_dir).get(repo)
+    stop = is_blocked(cache_dir, repo)
     if stop:
         return PolicyVerdict(repo, "bans", False, [], [f"maintainer said no: {stop['why']}"], stop["at"], stop["evidence"])
     cache = cache_dir / f"{repo.replace('/', '__')}.json"

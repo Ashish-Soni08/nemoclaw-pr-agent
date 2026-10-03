@@ -175,3 +175,63 @@ def test_pr_outcome_logged_once(gh, fake, tmp_path):
     row = led.rows()[-1]
     assert (row["phase"], row["subject"], row["decision"], row["why"], row["result"]) == ("pr.outcome", "issue:o/r#7", "merged o/r#42", "merged by maint", "merged")
     assert pr_updates(gh, reg, led) == [] and len(led.rows()) == 1
+
+
+def test_gate_hash_ignores_repo_diff_drivers(ws, tmp_path):
+    # Repo code can set diff.external; an empty diff must not make every change look gated.
+    import subprocess
+    subprocess.run(["git", "config", "diff.external", "true"], cwd=ws.path, check=True)
+    fix(ws)
+    record_gate(ws, "pass", "no findings", ["thermo", "security"])
+    Path(ws.path, "pkg.py").write_text("def add(a, b):\n    return b - a\n")
+    with pytest.raises(Refused, match="diff changed"):
+        preflight(ws, ALLOW, Registry(tmp_path), LIMITS, "fix(pkg): add numbers", BODY)
+
+
+def test_diff_cap_counts_renames_and_refuses_binaries(ws, tmp_path):
+    from pr_agent.workspace import diff_lines, UnsafeChange
+    Path(ws.path, "big.py").write_text("x = 1\n" * 300)
+    import subprocess
+    subprocess.run(["git", "add", "big.py"], cwd=ws.path, check=True)
+    subprocess.run(["git", "commit", "-qm", "big"], cwd=ws.path, check=True)
+    ws.base_sha = subprocess.run(["git", "rev-parse", "HEAD"], cwd=ws.path, capture_output=True, text=True).stdout.strip()
+    Path(ws.path, "big.py").rename(Path(ws.path, "moved.py"))
+    assert diff_lines(Path(ws.path), ws.base_sha) == 600
+    Path(ws.path, "blob.bin").write_bytes(b"\x00\x01" * 100)
+    with pytest.raises(UnsafeChange, match="binary"):
+        diff_lines(Path(ws.path), ws.base_sha)
+
+
+def test_changed_files_keeps_exec_bit_and_unicode_paths(ws):
+    fix(ws)
+    script = Path(ws.path, "run.sh")
+    script.write_text("#!/bin/sh\n")
+    script.chmod(0o755)
+    Path(ws.path, "é.py").write_text("y = 2\n")
+    changes = changed_files(Path(ws.path), ws.base_sha)
+    assert changes["run.sh"].mode == "100755"
+    assert changes["é.py"] == b"y = 2\n" and changes["pkg.py"].mode == "100644"
+
+
+def test_refuses_pr_while_claim_is_not_approved(ws, tmp_path):
+    fix(ws)
+    record_gate(ws, "pass", "no findings", ["thermo", "security"])
+    reg = Registry(tmp_path)
+    reg.save_claim("issue:o/r#7", {"repo": "o/r", "number": 7, "status": "declined"})
+    with pytest.raises(Refused, match="claim on this issue is declined"):
+        preflight(ws, ALLOW, reg, LIMITS, "fix(pkg): add numbers", BODY)
+    reg.save_claim("issue:o/r#7", {"status": "approved"})
+    preflight(ws, ALLOW, reg, LIMITS, "fix(pkg): add numbers", BODY)
+
+
+def test_refuses_body_that_would_hide_the_disclosure(ws, tmp_path):
+    fix(ws)
+    record_gate(ws, "pass", "no findings", ["thermo", "security"])
+    with pytest.raises(Refused, match="unclosed"):
+        preflight(ws, ALLOW, Registry(tmp_path), LIMITS, "fix(pkg): add numbers", BODY + "<!-- hidden")
+
+
+def test_one_open_pr_per_repo_ignores_case(tmp_path):
+    reg = Registry(tmp_path)
+    reg.save_pr("Org/Repo#1", {"repo": "Org/Repo", "number": 1, "state": "open"})
+    assert reg.open_in_repo("org/repo") == ["Org/Repo#1"]

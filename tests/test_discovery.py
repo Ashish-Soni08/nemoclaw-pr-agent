@@ -160,3 +160,14 @@ def test_queries_rotate_languages(tmp_path):
     second = [q["language"] for q in plan_queries(bank, tmp_path / "rot.json").queries]
     assert first == ["Python", "JavaScript"]
     assert second == ["TypeScript", "Python"]
+
+
+def test_per_run_cap_spans_separate_processes(tmp_path):
+    # Each pr-agent call builds its own DevIndex; the per-run backstop must still add up.
+    fake = FakeTransport().add("POST", "/v2/search/developer", {"data": {"results": []}})
+    first = DevIndex(client("https://api.firecrawl.dev", fake), CreditBook(tmp_path / "c.tsv"), "r1", max_per_run=6, max_per_month=900)
+    first.search({"query": "q", "k": 20})
+    second = DevIndex(client("https://api.firecrawl.dev", fake), CreditBook(tmp_path / "c.tsv"), "r1", max_per_run=6, max_per_month=900)
+    with pytest.raises(CreditCapReached):
+        second.search({"query": "q2", "k": 20})
+    assert len(fake.calls) == 1
