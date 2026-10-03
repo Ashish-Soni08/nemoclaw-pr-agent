@@ -97,10 +97,41 @@ def check_body(body: str) -> None:
         raise Refused("PR body uses Summary/Test plan boilerplate; use Why, Scope, Blast Radius, Verification")
     # The full AI disclosure goes after the body; anything left open here would swallow it.
     # (A one-line disclosure also goes first, where nothing in the body can hide it.)
-    low = body.lower()
-    fences = sum(1 for line in body.splitlines() if re.match(r"\s{0,3}(`{3,}|~{3,})", line))
-    if body.rfind("<!--") > body.rfind("-->") or fences % 2 or low.rfind("<details") > low.rfind("</details>"):
+    if leaves_open(body):
         raise Refused("PR body has an unclosed comment, code fence or <details> block")
+
+
+FENCE = re.compile(r" {0,3}(`{3,}|~{3,})(.*)$")
+TAG = re.compile(r"<!--|-->|<details\b|</details\s*>", re.I)
+
+
+def leaves_open(body: str) -> bool:
+    """Would anything appended after `body` render inside a code fence, comment or <details>?
+
+    Fences follow CommonMark: a closer uses the opener's character, at least as many of them,
+    and nothing after. Comments and <details> are tracked outside fences, in order."""
+    fence: str | None = None
+    in_comment, details = False, 0
+    for line in body.splitlines():
+        m = FENCE.match(line)
+        if fence is not None:
+            if m and m.group(1)[0] == fence[0] and len(m.group(1)) >= len(fence) and not m.group(2).strip():
+                fence = None
+            continue
+        if m and not in_comment and not (m.group(1)[0] == "`" and "`" in m.group(2)):
+            fence = m.group(1)
+            continue
+        for tok in TAG.findall(line):
+            tok = tok.lower()
+            if in_comment:
+                in_comment = tok != "-->"
+            elif tok == "<!--":
+                in_comment = True
+            elif tok.startswith("<details"):
+                details += 1
+            elif tok.startswith("</details"):
+                details = max(details - 1, 0)
+    return fence is not None or in_comment or details > 0
 
 
 HEADER = "> Written by an autonomous AI agent ([nemoclaw-pr-agent](https://github.com/Ashish-Soni08/nemoclaw-pr-agent)); details at the end.\n\n"

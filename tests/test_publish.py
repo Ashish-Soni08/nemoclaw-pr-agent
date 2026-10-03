@@ -229,7 +229,8 @@ def test_refuses_pr_while_claim_is_not_approved(ws, tmp_path):
 def test_refuses_body_that_would_hide_the_disclosure(ws, tmp_path):
     fix(ws)
     record_gate(ws, "pass", "no findings", ["thermo", "security"])
-    for trick in ("<!-- hidden", "--> <!-- hidden", "~~~\nhidden", "````\nhidden", "</details><details>"):
+    for trick in ("<!-- hidden", "--> <!-- hidden", "~~~\nhidden", "````\nhidden", "</details><details>",
+                  "````\n```\nhidden", "~~~\n```\nhidden", "<details>\n<details>x</details>"):
         with pytest.raises(Refused, match="unclosed"):
             preflight(ws, ALLOW, Registry(tmp_path), LIMITS, "fix(pkg): add numbers", BODY + trick)
 
@@ -238,3 +239,9 @@ def test_one_open_pr_per_repo_ignores_case(tmp_path):
     reg = Registry(tmp_path)
     reg.save_pr("Org/Repo#1", {"repo": "Org/Repo", "number": 1, "state": "open"})
     assert reg.open_in_repo("org/repo") == ["Org/Repo#1"]
+
+
+def test_balanced_markup_is_fine():
+    from pr_agent.publish import leaves_open
+    ok = "```py\nx = '<!--'\n```\n<details><summary>log</summary>\n\n````\n```\n````\n</details>\n<!-- note -->\n"
+    assert not leaves_open(ok)
