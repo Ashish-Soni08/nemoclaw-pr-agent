@@ -35,4 +35,5 @@ say "Firecrawl (api.firecrawl.dev, injected into PRAGENT_FIRECRAWL_KEY)"
 register "$REPO_DIR/policies/provider-profiles/pr-agent-firecrawl.yaml" pr-agent-firecrawl pr-agent-firecrawl-v1 PRAGENT_FIRECRAWL_KEY "$FIRECRAWL_API_KEY"
 
 openshell sandbox provider list "$SANDBOX"
+save_provider_placeholders
 say "Next: scripts/deploy.sh"

@@ -35,6 +35,9 @@ class Settings:
     def load(cls) -> "Settings":
         home = Path(os.environ.get("PR_AGENT_HOME", Path.home() / ".pr-agent")).expanduser()
         load_env_file(home / "secrets.env")
+        # Scheduled cron runs start from the Hermes gateway, which OpenShell doesn't give the
+        # provider placeholders (only exec sessions get them); deploy.sh saves them here.
+        load_env_file(home / "provider-env")
         agent_path = Path(os.environ.get("PR_AGENT_CONFIG", REPO_ROOT / "config" / "agent.yaml"))
         bank_path = Path(os.environ.get("PR_AGENT_QUERY_BANK", REPO_ROOT / "skills" / "discover-work" / "references" / "query-bank.yaml"))
         return cls(home=home, agent=_read_yaml(agent_path), query_bank=_read_yaml(bank_path))
