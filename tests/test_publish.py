@@ -113,6 +113,7 @@ def test_open_pr_pushes_via_api_and_adds_footer(ws, tmp_path, gh, fake):
     sent = fake.called("POST", "/repos/o/r/pulls")[0]
     assert sent["head"] == "bot:pr-agent/issue-7" and sent["draft"] is False
     assert "autonomous AI agent" in sent["body"] and "Fixes https://github.com/o/r/issues/7" in sent["body"]
+    assert sent["body"].startswith("> Written by an autonomous AI agent")
     assert reg.prs()["o/r#42"]["state"] == "open"
     assert led.rows()[-1]["phase"] == "pr.opened"
     with pytest.raises(Refused, match="already have an open PR"):
@@ -228,8 +229,9 @@ def test_refuses_pr_while_claim_is_not_approved(ws, tmp_path):
 def test_refuses_body_that_would_hide_the_disclosure(ws, tmp_path):
     fix(ws)
     record_gate(ws, "pass", "no findings", ["thermo", "security"])
-    with pytest.raises(Refused, match="unclosed"):
-        preflight(ws, ALLOW, Registry(tmp_path), LIMITS, "fix(pkg): add numbers", BODY + "<!-- hidden")
+    for trick in ("<!-- hidden", "--> <!-- hidden", "~~~\nhidden", "````\nhidden", "</details><details>"):
+        with pytest.raises(Refused, match="unclosed"):
+            preflight(ws, ALLOW, Registry(tmp_path), LIMITS, "fix(pkg): add numbers", BODY + trick)
 
 
 def test_one_open_pr_per_repo_ignores_case(tmp_path):

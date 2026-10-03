@@ -95,9 +95,15 @@ def check_body(body: str) -> None:
         raise Refused(f"PR body is missing {', '.join(missing)}")
     if "## Summary" in body or "## Test plan" in body:
         raise Refused("PR body uses Summary/Test plan boilerplate; use Why, Scope, Blast Radius, Verification")
-    # The AI disclosure goes after the body; anything left open here would swallow it.
-    if body.count("<!--") > body.count("-->") or body.count("```") % 2 or body.lower().count("<details") > body.lower().count("</details>"):
+    # The full AI disclosure goes after the body; anything left open here would swallow it.
+    # (A one-line disclosure also goes first, where nothing in the body can hide it.)
+    low = body.lower()
+    fences = sum(1 for line in body.splitlines() if re.match(r"\s{0,3}(`{3,}|~{3,})", line))
+    if body.rfind("<!--") > body.rfind("-->") or fences % 2 or low.rfind("<details") > low.rfind("</details>"):
         raise Refused("PR body has an unclosed comment, code fence or <details> block")
+
+
+HEADER = "> Written by an autonomous AI agent ([nemoclaw-pr-agent](https://github.com/Ashish-Soni08/nemoclaw-pr-agent)); details at the end.\n\n"
 
 
 def footer(issue_url: str, ledger_url: str, gate: dict[str, Any]) -> str:
@@ -178,7 +184,7 @@ def open_pr(gh: GitHub, meta: Meta, policy: PolicyVerdict, registry: Registry, l
         ledger.log("pr.refused", meta.issue_id, "did not open PR", str(why), meta.path, "refused")
         raise
     issue_url = f"https://github.com/{meta.repo}/issues/{meta.number}"
-    full_body = body.rstrip() + "\n" + footer(issue_url, ledger_url, gate)
+    full_body = HEADER + body.rstrip() + "\n" + footer(issue_url, ledger_url, gate)
     fork = gh.ensure_fork(meta.repo)
     gh.sync_fork(fork, meta.base_branch)
     commit_sha = gh.push_files(fork, meta.branch, meta.base_sha, changes, f"{title}\n\nFixes {issue_url}")
