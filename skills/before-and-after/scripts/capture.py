@@ -13,13 +13,24 @@ from pathlib import Path
 
 SAFE = {"PATH", "HOME", "LANG", "LC_ALL", "TMPDIR", "MPLBACKEND"}
 
+# The repo's script is untrusted, so it runs in pr-agent's jail (src/pr_agent/jail.py).
+sys.path.insert(0, os.path.join(os.environ.get("PR_AGENT_REPO", "/sandbox/nemoclaw-pr-agent"), "src"))
+from pr_agent import jail  # noqa: E402
 
-def run_side(cwd: Path, script: Path, out: Path, python: str) -> subprocess.CompletedProcess[str]:
+
+def meta_of(ws: Path) -> dict:
+    for path in (ws.parent / ".control" / ws.name / "meta.json", ws / ".pr-agent" / "meta.json"):
+        if path.exists():
+            return json.loads(path.read_text())
+    raise SystemExit(f"{ws} is not a prepared workspace")
+
+
+def run_side(cwd: Path, script: Path, out: Path, python: str, ws: Path, writable: list[Path]) -> subprocess.CompletedProcess[str]:
     env = {k: v for k, v in os.environ.items() if k in SAFE}
     # Put this side's source first on the path, so the editable install of the fix doesn't leak into "before".
     paths = [str(cwd / "src")] if (cwd / "src").is_dir() else []
     env.update({"OUT": str(out), "MPLBACKEND": "Agg", "PYTHONPATH": os.pathsep.join(paths + [str(cwd)])})
-    return subprocess.run([python, str(script)], cwd=cwd, env=env, capture_output=True, text=True, timeout=600)
+    return subprocess.run([python, str(script)], cwd=cwd, env=env, capture_output=True, text=True, timeout=600, preexec_fn=jail.preexec(ws, writable))
 
 
 def main() -> int:
@@ -30,7 +41,7 @@ def main() -> int:
     a = ap.parse_args()
 
     ws = Path(a.workspace).resolve()
-    meta = json.loads((ws / ".pr-agent" / "meta.json").read_text())
+    meta = meta_of(ws)
     home = Path(os.environ.get("PR_AGENT_HOME", Path.home() / ".pr-agent"))
     slug = Path(meta["path"]).name
     media = home / "ledger" / "media" / slug
@@ -46,7 +57,7 @@ def main() -> int:
             results = {}
             for side, cwd in (("before", base), ("after", ws)):
                 out = media / f"{side}.{a.kind}"
-                proc = run_side(cwd, script, out, python)
+                proc = run_side(cwd, script, out, python, ws, [base, media])
                 if a.kind == "txt" and not out.exists():
                     out.write_text(proc.stdout + proc.stderr)
                 results[side] = {"exit": proc.returncode, "file": str(out), "exists": out.exists()}

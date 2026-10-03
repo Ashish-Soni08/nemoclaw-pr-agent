@@ -40,6 +40,7 @@ def test_tests_run_without_secrets(ws, monkeypatch):
 def test_changed_files_ignores_agent_dirs(ws):
     fix(ws)
     Path(ws.path, "new_test.py").write_text("x = 1\n")
+    (Path(ws.path) / ".pr-agent").mkdir(exist_ok=True)
     (Path(ws.path) / ".pr-agent" / "notes.md").write_text("private")
     changes = changed_files(Path(ws.path), ws.base_sha)
     assert sorted(changes) == ["new_test.py", "pkg.py"]

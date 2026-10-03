@@ -85,7 +85,7 @@ def record_gate(meta: Meta, verdict: str, findings: str, reviewers: list[str]) -
         "reviewers": reviewers,
         "at": utcnow().isoformat(timespec="seconds"),
     }
-    write_json(Path(meta.path) / ".pr-agent" / "gate.json", gate)
+    write_json(meta.gate_path, gate)
     return gate
 
 
@@ -141,7 +141,7 @@ def check_changes(meta: Meta, limits: dict[str, Any], tree: str | None = None) -
 def gated_tree(meta: Meta) -> str:
     """Stage the workspace once and return its tree, if the gate passed on exactly that tree."""
     ws = Path(meta.path)
-    gate = read_json(ws / ".pr-agent" / "gate.json", None)
+    gate = read_json(meta.gate_path, None)
     if not gate:
         raise Refused("no self-review gate verdict for this workspace")
     if gate["verdict"] != "pass":
@@ -154,7 +154,7 @@ def gated_tree(meta: Meta) -> str:
 
 def preflight(meta: Meta, policy: PolicyVerdict, registry: Registry, limits: dict[str, Any], title: str, body: str, allow_unclear: bool = False) -> tuple[dict[str, Any], dict[str, Blob | None]]:
     tree = gated_tree(meta)
-    gate = read_json(Path(meta.path) / ".pr-agent" / "gate.json", {})
+    gate = read_json(meta.gate_path, {})
     claim = registry.claims().get(meta.issue_id)
     if claim and claim.get("status") != "approved":
         raise Refused(f"claim on this issue is {claim.get('status')}; a maintainer has not said yes")
