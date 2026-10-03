@@ -51,7 +51,9 @@ class GitHub:
         return self.client.get_json(f"/repos/{full}/issues/{number}/timeline?per_page=100")
 
     def comments(self, full: str, number: int, since: str | None = None) -> list[dict[str, Any]]:
-        q = f"?per_page=100&since={since}" if since else "?per_page=100"
+        from urllib.parse import quote
+
+        q = f"?per_page=100&since={quote(since)}" if since else "?per_page=100"
         return self.client.get_json(f"/repos/{full}/issues/{number}/comments{q}")
 
     def file_text(self, full: str, path: str, ref: str | None = None) -> str | None:
@@ -120,7 +122,7 @@ class GitHub:
                 tree.append({"path": path, "mode": "100644", "type": "blob", "sha": None})
                 continue
             blob = self._post(f"/repos/{repo}/git/blobs", {"content": base64.b64encode(content).decode(), "encoding": "base64"})
-            tree.append({"path": path, "mode": "100644", "type": "blob", "sha": blob["sha"]})
+            tree.append({"path": path, "mode": getattr(content, "mode", "100644"), "type": "blob", "sha": blob["sha"]})
         new_tree = self._post(f"/repos/{repo}/git/trees", {"base_tree": base_commit["tree"]["sha"], "tree": tree})
         commit = self._post(f"/repos/{repo}/git/commits", {"message": message, "tree": new_tree["sha"], "parents": [base_sha]})
         ref = self.client.request("GET", f"/repos/{repo}/git/ref/heads/{branch}")

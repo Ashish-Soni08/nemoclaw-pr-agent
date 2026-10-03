@@ -18,7 +18,7 @@ from .github import GitHub
 from .ledger import Ledger
 from .policy import PolicyVerdict
 from .state import read_json, write_json
-from .workspace import Meta, UnsafeChange, changed_files, diff_hash, diff_text
+from .workspace import Blob, Meta, UnsafeChange, changed_files, diff_hash, diff_lines, stage_tree
 
 REQUIRED_SECTIONS = ("## Why", "## Scope", "## Blast Radius", "## Verification")
 TITLE = re.compile(r"^(feat|fix|docs|refactor|test|chore|perf)(\([\w./-]+\))?: \S.{0,70}$")
@@ -71,7 +71,8 @@ class Registry:
         return sum(1 for c in self.claims().values() if c.get("claimed_at", "").startswith(day))
 
     def open_in_repo(self, repo: str) -> list[str]:
-        return [k for k, p in self.prs().items() if p.get("repo") == repo and p.get("state") == "open"]
+        # GitHub repo names are case-insensitive: Org/Repo and org/repo are the same repo.
+        return [k for k, p in self.prs().items() if str(p.get("repo", "")).lower() == repo.lower() and p.get("state") == "open"]
 
 
 def record_gate(meta: Meta, verdict: str, findings: str, reviewers: list[str]) -> dict[str, Any]:
@@ -94,6 +95,9 @@ def check_body(body: str) -> None:
         raise Refused(f"PR body is missing {', '.join(missing)}")
     if "## Summary" in body or "## Test plan" in body:
         raise Refused("PR body uses Summary/Test plan boilerplate; use Why, Scope, Blast Radius, Verification")
+    # The AI disclosure goes after the body; anything left open here would swallow it.
+    if body.count("<!--") > body.count("-->") or body.count("```") % 2 or body.lower().count("<details") > body.lower().count("</details>"):
+        raise Refused("PR body has an unclosed comment, code fence or <details> block")
 
 
 def footer(issue_url: str, ledger_url: str, gate: dict[str, Any]) -> str:
@@ -111,35 +115,49 @@ def footer(issue_url: str, ledger_url: str, gate: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
-def check_changes(meta: Meta, limits: dict[str, Any]) -> dict[str, bytes | None]:
-    """What may leave the sandbox, for a new PR and for every follow-up push alike."""
+def check_changes(meta: Meta, limits: dict[str, Any], tree: str | None = None) -> dict[str, Blob | None]:
+    """What may leave the sandbox, for a new PR and for every follow-up push alike.
+
+    Pass the tree the gate hash was checked against, so the files pushed are exactly those."""
     ws = Path(meta.path)
+    tree = tree or stage_tree(ws)
     try:
-        changes = changed_files(ws, meta.base_sha)
+        changes = changed_files(ws, meta.base_sha, tree)
+        n_lines = diff_lines(ws, meta.base_sha, tree)
     except UnsafeChange as why:
         raise Refused(str(why)) from None
     if not changes:
         raise Refused("no changes to publish")
-    n_lines = sum(1 for l in diff_text(ws, meta.base_sha).splitlines() if l[:1] in "+-" and l[:3] not in ("+++", "---"))
     if n_lines > limits.get("max_diff_lines", 400):
         raise Refused(f"diff is {n_lines} lines, over the {limits.get('max_diff_lines', 400)} line cap")
     if len(changes) > limits.get("max_files", 20):
         raise Refused(f"diff touches {len(changes)} files, over the cap")
     for path in changes:
-        if path.startswith(".github/workflows/"):
+        if path.startswith((".github/workflows/", ".github/actions/")):
             raise Refused("agent never edits CI workflows")
     return changes
 
 
-def preflight(meta: Meta, policy: PolicyVerdict, registry: Registry, limits: dict[str, Any], title: str, body: str, allow_unclear: bool = False) -> tuple[dict[str, Any], dict[str, bytes | None]]:
+def gated_tree(meta: Meta) -> str:
+    """Stage the workspace once and return its tree, if the gate passed on exactly that tree."""
     ws = Path(meta.path)
     gate = read_json(ws / ".pr-agent" / "gate.json", None)
     if not gate:
         raise Refused("no self-review gate verdict for this workspace")
     if gate["verdict"] != "pass":
         raise Refused(f"self-review gate failed: {gate['findings'][:200]}")
-    if gate["diff_hash"] != diff_hash(ws, meta.base_sha):
+    tree = stage_tree(ws)
+    if gate["diff_hash"] != diff_hash(ws, meta.base_sha, tree):
         raise Refused("diff changed after the gate passed; run the gate again")
+    return tree
+
+
+def preflight(meta: Meta, policy: PolicyVerdict, registry: Registry, limits: dict[str, Any], title: str, body: str, allow_unclear: bool = False) -> tuple[dict[str, Any], dict[str, Blob | None]]:
+    tree = gated_tree(meta)
+    gate = read_json(Path(meta.path) / ".pr-agent" / "gate.json", {})
+    claim = registry.claims().get(meta.issue_id)
+    if claim and claim.get("status") != "approved":
+        raise Refused(f"claim on this issue is {claim.get('status')}; a maintainer has not said yes")
     if not policy.permits(allow_unclear):
         raise Refused(f"repo AI policy is {policy.verdict}")
     if 0 < limits.get("max_prs_per_day", 0) <= registry.opened_today():
@@ -149,7 +167,7 @@ def preflight(meta: Meta, policy: PolicyVerdict, registry: Registry, limits: dic
     if not TITLE.match(title):
         raise Refused("title must be Conventional Commits: type(scope): subject, under ~70 chars")
     check_body(body)
-    changes = check_changes(meta, limits)
+    changes = check_changes(meta, limits, tree)
     return gate, changes
 
 
@@ -251,10 +269,10 @@ def pr_updates(gh: GitHub, registry: Registry, ledger: Ledger | None = None) -> 
         new = []
         for c in gh.pr_review_comments(rec["repo"], rec["number"]):
             if c["id"] not in seen and c["user"]["login"] != me:
-                new.append({"kind": "review", "id": c["id"], "author": c["user"]["login"], "path": c.get("path"), "line": c.get("line"), "body": c["body"][:800], "url": c["html_url"]})
+                new.append({"kind": "review", "id": c["id"], "author": c["user"]["login"], "association": c.get("author_association"), "path": c.get("path"), "line": c.get("line"), "body": c["body"][:800], "url": c["html_url"]})
         for c in gh.comments(rec["repo"], rec["number"]):
             if c["id"] not in seen and c["user"]["login"] != me:
-                new.append({"kind": "conversation", "id": c["id"], "author": c["user"]["login"], "body": c["body"][:800], "url": c["html_url"]})
+                new.append({"kind": "conversation", "id": c["id"], "author": c["user"]["login"], "association": c.get("author_association"), "body": c["body"][:800], "url": c["html_url"]})
         # Comments stay "new" until the agent answers or acks them, so a crashed run loses nothing.
         registry.save_pr(key, {"state": state, "checked_at": utcnow().isoformat(timespec="seconds")})
         if state != "open" and ledger is not None:

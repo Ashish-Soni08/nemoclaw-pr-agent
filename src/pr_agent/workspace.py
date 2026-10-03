@@ -242,18 +242,52 @@ class UnsafeChange(RuntimeError):
     """The working tree holds something the agent must never publish."""
 
 
-def changed_files(ws: Path, base_sha: str) -> dict[str, bytes | None]:
-    """Staged tree vs base: path -> new bytes, or None for a deletion. Untracked files count.
+class Blob(bytes):
+    """File content headed for a PR, with the git mode it was staged with (100644 or 100755)."""
 
-    Content comes from git's own blobs, never by opening the path, so a symlink planted by
-    repo code (say, to a secrets file) can't smuggle another file's bytes into a PR. Symlinks
-    and submodules are refused outright.
+    mode: str = "100644"
+
+    def __new__(cls, data: bytes, mode: str = "100644") -> "Blob":
+        obj = super().__new__(cls, data)
+        obj.mode = mode
+        return obj
+
+
+# Repo code can write .git/config and ~/.gitconfig. These keep the agent's own git calls
+# from running its hooks or fsmonitor, and from reading its diff drivers or textconv
+# filters, so the diff the gate sees is the diff that gets pushed.
+GIT = ["git", "-c", "core.fsmonitor=false", "-c", "core.hooksPath=/dev/null", "-c", "core.quotePath=false"]
+
+
+def git(args: list[str], ws: Path, timeout: int = 120) -> subprocess.CompletedProcess[str]:
+    env = scrubbed_env({"GIT_CONFIG_NOSYSTEM": "1", "GIT_CONFIG_GLOBAL": "/dev/null"})
+    return run(GIT + args, cwd=ws, timeout=timeout, env=env)
+
+
+def stage_tree(ws: Path) -> str:
+    """Stage everything (untracked files too, minus agent dirs) and return the tree id."""
+    git(["add", "-A", "--", ".", ":!.pr-agent", ":!.venv-pr-agent"], ws)
+    proc = git(["write-tree"], ws)
+    if proc.returncode != 0:
+        raise RuntimeError(f"git write-tree failed: {proc.stderr[-300:]}")
+    return proc.stdout.strip()
+
+
+def changed_files(ws: Path, base_sha: str, tree: str | None = None) -> dict[str, Blob | None]:
+    """Tree vs base: path -> new bytes, or None for a deletion. Untracked files count.
+
+    Content comes from git's own blobs in that exact tree, never by opening the path, so a
+    symlink planted by repo code (say, to a secrets file) can't smuggle another file's bytes
+    into a PR, and an edit made after the tree was staged can't either. Symlinks and
+    submodules are refused outright.
     """
-    run(["git", "add", "-A", "--", ".", ":!.pr-agent", ":!.venv-pr-agent"], cwd=ws)
-    proc = run(["git", "diff", "--cached", "--raw", "--no-renames", "--no-abbrev", base_sha], cwd=ws)
-    changes: dict[str, bytes | None] = {}
-    for line in proc.stdout.splitlines():
-        info, _, path = line.partition("\t")
+    tree = tree or stage_tree(ws)
+    proc = git(["diff-tree", "-r", "-z", "--raw", "--no-renames", "--no-abbrev", base_sha, tree], ws)
+    if proc.returncode != 0:
+        raise RuntimeError(f"git diff-tree failed: {proc.stderr[-300:]}")
+    fields = proc.stdout.split("\0")
+    changes: dict[str, Blob | None] = {}
+    for info, path in zip(fields[0::2], fields[1::2]):
         if not path:
             continue
         _old_mode, new_mode, _old_sha, new_sha, status = info.lstrip(":").split()
@@ -262,15 +296,33 @@ def changed_files(ws: Path, base_sha: str) -> dict[str, bytes | None]:
             continue
         if new_mode in ("120000", "160000"):
             raise UnsafeChange(f"{path} is a {'symlink' if new_mode == '120000' else 'submodule'}; the agent never publishes those")
-        blob = subprocess.run(["git", "cat-file", "blob", new_sha], cwd=ws, env=scrubbed_env(), capture_output=True, check=True, timeout=60)
-        changes[path] = blob.stdout
+        blob = subprocess.run(GIT + ["cat-file", "blob", new_sha], cwd=ws, env=scrubbed_env({"GIT_CONFIG_NOSYSTEM": "1", "GIT_CONFIG_GLOBAL": "/dev/null"}), capture_output=True, check=True, timeout=60)
+        changes[path] = Blob(blob.stdout, "100755" if new_mode == "100755" else "100644")
     return changes
 
 
-def diff_text(ws: Path, base_sha: str) -> str:
-    run(["git", "add", "-A", "--", ".", ":!.pr-agent", ":!.venv-pr-agent"], cwd=ws)
-    return run(["git", "diff", "--cached", base_sha], cwd=ws).stdout
+def diff_lines(ws: Path, base_sha: str, tree: str | None = None) -> int:
+    """Added plus deleted lines, renames counted in full. Binary files are refused."""
+    tree = tree or stage_tree(ws)
+    proc = git(["diff-tree", "-r", "-z", "--numstat", "--no-renames", "--no-ext-diff", "--no-textconv", base_sha, tree], ws)
+    total = 0
+    for rec in proc.stdout.split("\0"):
+        if not rec.strip():
+            continue
+        added, deleted, path = rec.split("\t", 2)
+        if added == "-" or deleted == "-":
+            raise UnsafeChange(f"{path} is a binary file; the agent only publishes text changes")
+        total += int(added) + int(deleted)
+    return total
 
 
-def diff_hash(ws: Path, base_sha: str) -> str:
-    return hashlib.sha256(diff_text(ws, base_sha).encode()).hexdigest()[:16]
+def diff_text(ws: Path, base_sha: str, tree: str | None = None) -> str:
+    """The patch the self-review gate reads, built from the same tree that gets pushed."""
+    tree = tree or stage_tree(ws)
+    return git(["diff-tree", "-r", "-p", "--no-renames", "--no-ext-diff", "--no-textconv", base_sha, tree], ws).stdout
+
+
+def diff_hash(ws: Path, base_sha: str, tree: str | None = None) -> str:
+    """Binds a gate verdict to one exact change: the base commit plus the staged tree id."""
+    tree = tree or stage_tree(ws)
+    return hashlib.sha256(f"{base_sha}:{tree}".encode()).hexdigest()[:16]

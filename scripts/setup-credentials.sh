@@ -22,9 +22,9 @@ register() {  # profile-file provider-name profile-id env-name value
     rm -f "$tmp"
   fi
   if openshell provider list 2>/dev/null | grep -qw "$name"; then
-    env "$env=$value" openshell provider update "$name" --credential "$env"
+    ( export "$env=$value"; openshell provider update "$name" --credential "$env" )
   else
-    env "$env=$value" openshell provider create --name "$name" --type "$id" --credential "$env"
+    ( export "$env=$value"; openshell provider create --name "$name" --type "$id" --credential "$env" )
   fi
   openshell sandbox provider attach "$SANDBOX" "$name" || echo "(already attached)"
 }

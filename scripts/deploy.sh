@@ -6,8 +6,16 @@ source "$(dirname "$0")/_lib.sh"
 need nemohermes "run scripts/install.sh first"
 
 say "Uploading the repo to $SANDBOX_REPO"
+# Only what git would commit (tracked plus untracked-but-not-ignored files) and .git, for
+# the commit id in run_config. Ignored files such as a local .env with real keys stay out:
+# other people's test code runs in the sandbox and could read them.
+stage="$(mktemp -d)"
+trap 'rm -rf "$stage"' EXIT
+mkdir "$stage/$(basename "$SANDBOX_REPO")"
+{ git -C "$REPO_DIR" ls-files -z -co --exclude-standard; printf '.git\0'; } \
+  | tar -C "$REPO_DIR" --null -T - -cf - | tar -C "$stage/$(basename "$SANDBOX_REPO")" -xf -
 nemohermes "$SANDBOX" exec -- rm -rf "$SANDBOX_REPO"
-nemohermes "$SANDBOX" upload "$REPO_DIR" /sandbox/
+nemohermes "$SANDBOX" upload "$stage/$(basename "$SANDBOX_REPO")" /sandbox/
 nemohermes "$SANDBOX" exec -- bash -c "test -x $SANDBOX_REPO/bin/pr-agent && mkdir -p /sandbox/.local/bin && ln -sf $SANDBOX_REPO/bin/pr-agent /sandbox/.local/bin/pr-agent"
 
 say "Private interpreter for pr-agent (the only binary the GitHub and Firecrawl keys are injected for)"
@@ -21,7 +29,8 @@ for dir in "$REPO_DIR"/skills/*/; do
   name="$(basename "$dir")"
   # skill install refuses to replace a skill a previous deploy installed, so drop ours first.
   nemohermes "$SANDBOX" exec -- rm -rf "/sandbox/.hermes/skills/$name"
-  nemohermes "$SANDBOX" skill install "$dir" || echo "kept the installed $name"
+  # The old copy is already gone, so a failed install must fail the deploy, not pass silently.
+  nemohermes "$SANDBOX" skill install "$dir"
 done
 nemohermes "$SANDBOX" skill list
 

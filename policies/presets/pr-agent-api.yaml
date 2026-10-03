@@ -18,8 +18,18 @@ network_policies:
         enforcement: enforce
         rules:
           - allow: { method: GET, path: "/**" }
-          - allow: { method: POST, path: "/repos/**" }
-          - allow: { method: PATCH, path: "/repos/**" }
+          # Only the writes src/pr_agent/github.py makes. No merges, transfers, repo
+          # settings, new issues or reviews, whatever the model tries.
+          - allow: { method: POST, path: "/repos/*/*/forks" }
+          - allow: { method: POST, path: "/repos/*/*/merge-upstream" }
+          - allow: { method: POST, path: "/repos/*/*/git/blobs" }
+          - allow: { method: POST, path: "/repos/*/*/git/trees" }
+          - allow: { method: POST, path: "/repos/*/*/git/commits" }
+          - allow: { method: POST, path: "/repos/*/*/git/refs" }
+          - allow: { method: PATCH, path: "/repos/*/*/git/refs/heads/pr-agent/**" }
+          - allow: { method: POST, path: "/repos/*/*/pulls" }
+          - allow: { method: POST, path: "/repos/*/*/issues/*/comments" }
+          - allow: { method: POST, path: "/repos/*/*/pulls/*/comments/*/replies" }
     binaries:
       - { path: /sandbox/.pr-agent/bin/python }
   pr_agent_firecrawl:
