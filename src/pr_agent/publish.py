@@ -102,29 +102,38 @@ def check_body(body: str) -> None:
                       "write plain Markdown and close every fence")
 
 
-FENCE = re.compile(r" {0,3}(`{3,}|~{3,})(.*)$")
-# Anything that starts HTML GitHub would render: comments, <details> anywhere on a line, and
-# every CommonMark HTML block opener (a tag, <!..., <?...) at the start of a line.
-HTML = re.compile(r"<!--|-->|</?details\b|^ {0,3}<[A-Za-z/!?]", re.I)
+# A fence-like line, with whatever indentation, blockquote or list markers come before it.
+FENCE = re.compile(r"([ \t>]*(?:(?:[-*+]|\d{1,9}[.)])[ \t]+[ \t>]*)*)(`{3,}|~{3,})(.*)$")
+CLOSER = re.compile(r" {0,3}(`{3,}|~{3,})[ \t]*$")
+# Anything that starts HTML GitHub would render: comments and <details> anywhere on a line,
+# and any tag, <!... or <?... at the start of a line, inside a quote or list item or not.
+HTML = re.compile(r"<!--|-->|</?details\b|^[ \t>]*(?:(?:[-*+]|\d{1,9}[.)])[ \t]+[ \t>]*)*<[A-Za-z/!?]", re.I)
 
 
 def leaves_open(body: str) -> bool:
     """Would anything appended after `body` render inside a code fence, comment or <details>?
 
-    One pass, deliberately strict. Fences follow CommonMark: a closer uses the opener's
-    character, at least as many, and nothing after. Outside fences no raw HTML is allowed at
-    all, since an HTML block turns fence lines into raw text and an open comment or <details>
-    hides what follows; tracking the two separately let one construct's closer cancel the
-    other's opener. Inside a fence everything is literal, so HTML there is fine. A false
-    alarm only means the model rewrites the body in plain Markdown."""
+    One pass, deliberately strict, so that no construct can close another's opener:
+    - fences are allowed only at the very start of a line. One that is indented, quoted or
+      in a list item ends with its container, so where it ends depends on the container,
+      and it is refused instead. A closer uses the opener's character, at least as many,
+      and nothing after (CommonMark);
+    - outside fences no raw HTML is allowed at all, since an HTML block turns fence lines
+      into raw text and an open comment or <details> hides what follows. Inside a fence
+      (always top level, so everything in it is literal) HTML is fine.
+    A false alarm only means the model rewrites the body in plain Markdown."""
     fence: str | None = None
     for line in body.splitlines():
-        m = FENCE.match(line)
         if fence is not None:
-            if m and m.group(1)[0] == fence[0] and len(m.group(1)) >= len(fence) and not m.group(2).strip():
+            m = CLOSER.match(line)
+            if m and m.group(1)[0] == fence[0] and len(m.group(1)) >= len(fence):
                 fence = None
-        elif m and not (m.group(1)[0] == "`" and "`" in m.group(2)):
-            fence = m.group(1)
+            continue
+        m = FENCE.match(line)
+        if m and not (m.group(2)[0] == "`" and "`" in m.group(3)):
+            if m.group(1):
+                return True
+            fence = m.group(2)
         elif HTML.search(line):
             return True
     return fence is not None

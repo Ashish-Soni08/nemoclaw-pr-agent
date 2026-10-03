@@ -232,7 +232,8 @@ def test_refuses_body_that_would_hide_the_disclosure(ws, tmp_path):
     for trick in ("<!-- hidden", "--> <!-- hidden", "~~~\nhidden", "````\nhidden", "</details><details>",
                   "````\n```\nhidden", "~~~\n```\nhidden", "<details>\n<details>x</details>",
                   "<details>\n```\n</details>\n```\nhidden", "```\n<!--\n```\n-->\nhidden",
-                  "<div>\n```\n</div>\n\n```\nhidden", "<!-- x -->"):
+                  "<div>\n```\n</div>\n\n```\nhidden", "<!-- x -->",
+                  "- item\n  ```\n<!--\n```\nhidden", "- item\n  ```\n```\nhidden", "> ```\nx", "- <div>"):
         with pytest.raises(Refused, match="raw HTML"):
             preflight(ws, ALLOW, Registry(tmp_path), LIMITS, "fix(pkg): add numbers", BODY + trick)
 
