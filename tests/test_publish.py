@@ -243,5 +243,7 @@ def test_one_open_pr_per_repo_ignores_case(tmp_path):
 
 def test_balanced_markup_is_fine():
     from pr_agent.publish import leaves_open
-    ok = "```py\nx = '<!--'\n```\n<details><summary>log</summary>\n\n````\n```\n````\n</details>\n<!-- note -->\n"
+    ok = "```py\nx = 1\n```\n<details><summary>log</summary>\n\n````\n```\n````\n</details>\n<!-- note -->\n"
     assert not leaves_open(ok)
+    # Inside an HTML block GitHub renders fence lines as raw text, so markup there still counts.
+    assert leaves_open("<div>\n```\n<details>\n```\n</div>\n")

@@ -108,19 +108,20 @@ TAG = re.compile(r"<!--|-->|<details\b|</details\s*>", re.I)
 def leaves_open(body: str) -> bool:
     """Would anything appended after `body` render inside a code fence, comment or <details>?
 
-    Fences follow CommonMark: a closer uses the opener's character, at least as many of them,
-    and nothing after. Comments and <details> are tracked outside fences, in order."""
+    Deliberately conservative: comments and <details> are tracked over the whole text, fenced
+    or not, because inside an HTML block GitHub treats fence lines as raw text. Fences follow
+    CommonMark: a closer uses the opener's character, at least as many, and nothing after.
+    A false alarm only means the model rewrites the body."""
     fence: str | None = None
-    in_comment, details = False, 0
     for line in body.splitlines():
         m = FENCE.match(line)
         if fence is not None:
             if m and m.group(1)[0] == fence[0] and len(m.group(1)) >= len(fence) and not m.group(2).strip():
                 fence = None
-            continue
-        if m and not in_comment and not (m.group(1)[0] == "`" and "`" in m.group(2)):
+        elif m and not (m.group(1)[0] == "`" and "`" in m.group(2)):
             fence = m.group(1)
-            continue
+    in_comment, details = False, 0
+    for line in body.splitlines():
         for tok in TAG.findall(line):
             tok = tok.lower()
             if in_comment:

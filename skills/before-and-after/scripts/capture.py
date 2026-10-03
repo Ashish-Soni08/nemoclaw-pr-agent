@@ -41,7 +41,8 @@ def copy_out(src: Path, dest: Path) -> bool:
     """Copy what the jailed script wrote, if it is a plain file. The script controls `src`,
     so a symlink there (to gate.json, a secrets file) must not be followed."""
     try:
-        fd = os.open(src, os.O_RDONLY | os.O_NOFOLLOW)
+        # O_NONBLOCK: a FIFO planted at `src` must not hang the open; it is then refused below.
+        fd = os.open(src, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
     except OSError:
         return False
     with os.fdopen(fd, "rb") as fh:
