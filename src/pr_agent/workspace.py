@@ -2,6 +2,9 @@
 
 Repository content is untrusted. Everything here runs inside the OpenShell
 sandbox, with a time limit, and never with a credential in the environment.
+Repo code (installs, tests) also runs under the Landlock jail in jail.py, and the
+files that steer publishing (meta.json, gate.json) live outside the workspace, in
+a control directory next to it, where that code can't write.
 """
 
 from __future__ import annotations
@@ -17,6 +20,7 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
 
+from . import jail as jail_mod
 from .state import read_json, write_json
 
 SAFE_ENV_KEYS = {
@@ -33,6 +37,12 @@ def scrubbed_env(extra: dict[str, str] | None = None) -> dict[str, str]:
     env = {k: v for k, v in os.environ.items() if k in SAFE_ENV_KEYS}
     env.update(extra or {})
     return env
+
+
+def control_dir(ws: Path) -> Path:
+    """Where meta.json and gate.json live: beside the workspace, outside the jail's reach."""
+    ws = Path(ws)
+    return ws.parent / ".control" / ws.name
 
 
 def slug(issue_id: str) -> str:
@@ -57,29 +67,43 @@ class Meta:
 
     @property
     def meta_path(self) -> Path:
-        return Path(self.path) / ".pr-agent" / "meta.json"
+        return control_dir(Path(self.path)) / "meta.json"
+
+    @property
+    def gate_path(self) -> Path:
+        return control_dir(Path(self.path)) / "gate.json"
 
     def save(self) -> None:
         write_json(self.meta_path, asdict(self))
 
     @classmethod
     def load(cls, ws: Path) -> "Meta":
-        data = read_json(ws / ".pr-agent" / "meta.json", None)
+        ws = Path(ws).resolve()
+        data = read_json(control_dir(ws) / "meta.json", None)
         if data is None:
-            raise SystemExit(f"{ws} is not a prepared workspace (no .pr-agent/meta.json)")
+            legacy = read_json(ws / ".pr-agent" / "meta.json", None)
+            if legacy is None:
+                raise SystemExit(f"{ws} is not a prepared workspace (no meta.json in {control_dir(ws)})")
+            # Workspaces made before the control directory: adopt the metadata once. Its gate
+            # verdict is not carried over, so the gate has to run again before anything ships.
+            meta = cls(**legacy)
+            meta.path = str(ws)
+            meta.save()
+            return meta
         return cls(**data)
 
 
-def run(cmd: list[str] | str, cwd: Path, timeout: int = 900, env: dict[str, str] | None = None) -> subprocess.CompletedProcess[str]:
+def run(cmd: list[str] | str, cwd: Path, timeout: int = 900, env: dict[str, str] | None = None, jail: Path | None = None) -> subprocess.CompletedProcess[str]:
+    """`jail`: the workspace to confine the command to (repo code). None for the agent's own git calls."""
     return subprocess.run(
         cmd, cwd=cwd, timeout=timeout, env=env if env is not None else scrubbed_env(), shell=isinstance(cmd, str),
-        capture_output=True, text=True, check=False,
+        capture_output=True, text=True, check=False, preexec_fn=jail_mod.preexec(jail) if jail is not None else None,
     )
 
 
 def prepare(issue_id: str, repo: str, number: int, base_branch: str, root: Path, clone_url: str | None = None) -> Meta:
     ws = root / slug(issue_id)
-    if (ws / ".pr-agent" / "meta.json").exists():
+    if (control_dir(ws) / "meta.json").exists() or (ws / ".pr-agent" / "meta.json").exists():
         return Meta.load(ws)
     url = clone_url or f"https://github.com/{repo}.git"
     ws.parent.mkdir(parents=True, exist_ok=True)
@@ -174,21 +198,21 @@ def _setup_python(ws: Path, timeout: int) -> dict[str, Any]:
     """Venv plus an editable install with whatever test extras exist."""
     started = time.monotonic()
     venv = ws / ".venv-pr-agent"
-    proc = run(["python3", "-m", "venv", str(venv)], cwd=ws, timeout=300)
+    proc = run(["python3", "-m", "venv", str(venv)], cwd=ws, timeout=300, jail=ws)
     if proc.returncode != 0:
         return {"ecosystem": "python", "installed": False, "error": proc.stderr[-300:], "seconds": round(time.monotonic() - started, 1)}
     pip = [str(venv / "bin" / "python"), "-m", "pip", "install", "-q"]
-    run(pip + ["--upgrade", "pip"], cwd=ws, timeout=timeout)
+    run(pip + ["--upgrade", "pip"], cwd=ws, timeout=timeout, jail=ws)
     installed = False
     for extras in ("[test,tests,dev]", "[test]", "[tests]", "[dev]", ""):
-        proc = run(pip + ["-e", f".{extras}"], cwd=ws, timeout=timeout)
+        proc = run(pip + ["-e", f".{extras}"], cwd=ws, timeout=timeout, jail=ws)
         if proc.returncode == 0:
             installed = True
             break
     for req in ("requirements-dev.txt", "requirements-test.txt", "test-requirements.txt", "requirements/test.txt"):
         if (ws / req).exists():
-            run(pip + ["-r", req], cwd=ws, timeout=timeout)
-    run(pip + ["pytest"], cwd=ws, timeout=timeout)
+            run(pip + ["-r", req], cwd=ws, timeout=timeout, jail=ws)
+    run(pip + ["pytest"], cwd=ws, timeout=timeout, jail=ws)
     return {"ecosystem": "python", "installed": installed, "seconds": round(time.monotonic() - started, 1)}
 
 
@@ -214,7 +238,7 @@ def _setup_node(ws: Path, timeout: int) -> dict[str, Any]:
     else:
         attempts = [base + ["install", "--frozen-lockfile"], base + ["install"]]
     for cmd in attempts:
-        proc = run(cmd, cwd=ws, timeout=timeout)
+        proc = run(cmd, cwd=ws, timeout=timeout, jail=ws)
         if proc.returncode == 0:
             out["installed"] = True
             break
@@ -227,12 +251,12 @@ def _setup_node(ws: Path, timeout: int) -> dict[str, Any]:
 def run_tests(ws: Path, cmd: str, timeout: int = 1800) -> dict[str, Any]:
     started = time.monotonic()
     try:
-        proc = run(shlex.split(cmd), cwd=ws, timeout=timeout)
+        proc = run(shlex.split(cmd), cwd=ws, timeout=timeout, jail=ws)
         code, out = proc.returncode, (proc.stdout + proc.stderr)
     except subprocess.TimeoutExpired:
         code, out = -1, f"timed out after {timeout}s"
     tail = "\n".join(out.strip().splitlines()[-15:])
-    log = ws / ".pr-agent" / f"tests-{int(time.time())}.log"
+    log = control_dir(ws) / f"tests-{int(time.time())}.log"
     log.parent.mkdir(parents=True, exist_ok=True)
     log.write_text(out)
     return {"cmd": cmd, "exit": code, "passed": code == 0, "tail": tail, "log": str(log), "seconds": round(time.monotonic() - started, 1)}
@@ -326,3 +350,44 @@ def diff_hash(ws: Path, base_sha: str, tree: str | None = None) -> str:
     """Binds a gate verdict to one exact change: the base commit plus the staged tree id."""
     tree = tree or stage_tree(ws)
     return hashlib.sha256(f"{base_sha}:{tree}".encode()).hexdigest()[:16]
+
+
+SELFCHECK = r"""
+import json, os, subprocess, sys
+probe, interp = sys.argv[1], sys.argv[2]
+def tried(f):
+    try:
+        f()
+        return "allowed"
+    except Exception as e:
+        return f"blocked ({type(e).__name__})"
+res = {
+    "read_agent_state": tried(lambda: open(probe).read()),
+    "write_agent_state": tried(lambda: open(probe + ".planted", "w").write("x")),
+    "read_agent_environ": tried(lambda: open(f"/proc/{os.getppid()}/environ", "rb").read()),
+    "write_workspace": tried(lambda: open("probe.txt", "w").write("x")),
+}
+if interp:
+    res["run_key_interpreter"] = tried(lambda: subprocess.run([interp, "-c", "0"], check=True, capture_output=True))
+print(json.dumps(res))
+"""
+
+
+def isolation_selfcheck(state_dir: Path, workspaces_dir: Path, interpreter: str = "/sandbox/.pr-agent/bin/python") -> dict[str, Any]:
+    """Run a probe inside the jail and report what it could reach. All but the workspace must be blocked."""
+    probe = state_dir / "selfcheck-probe.txt"
+    probe.write_text("agent state")
+    ws = workspaces_dir / ".selfcheck"
+    ws.mkdir(parents=True, exist_ok=True)
+    interp = interpreter if Path(interpreter).exists() else ""
+    env = scrubbed_env()
+    try:
+        proc = run(["python3", "-c", SELFCHECK, str(probe), interp], cwd=ws, timeout=60, env=env, jail=ws)
+        found = json.loads(proc.stdout.strip().splitlines()[-1]) if proc.stdout.strip() else {"error": proc.stderr[-300:]}
+    finally:
+        probe.unlink(missing_ok=True)
+        Path(str(probe) + ".planted").unlink(missing_ok=True)
+        shutil.rmtree(ws, ignore_errors=True)
+    blocked = all(str(v).startswith("blocked") for k, v in found.items() if k != "write_workspace")
+    isolated = blocked and found.get("write_workspace") == "allowed" and jail_mod.required()
+    return {"isolated": isolated, "landlock_abi": jail_mod.abi(), "required": jail_mod.required(), "checks": found}

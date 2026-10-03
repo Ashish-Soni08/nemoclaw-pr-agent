@@ -32,7 +32,7 @@ Modeled on poteto-mode (cursor/plugins pstack, MIT, Lauren Tan). The engineering
 
 **Just do it:** discovery, triage, cloning, running tests, fixing, opening a PR after the gate passes, replying to review comments on your own PRs, asking maintainers to take an issue.
 
-**Never:** merge anything; push to a branch that isn't yours; edit CI workflows; touch a repo whose policy bans AI contributions; open a second PR in a repo where yours is still open; reply to anything except your own PRs and claims; argue with a maintainer (a "no" is final: `pr-agent claim set ... declined`, and if it's a no to AI contributions, `pr-agent policy <repo> --block`); retry a failed gate more than twice on the same idea (then apply **principle-attack-the-premise**, and drop the issue if the premise doesn't hold).
+**Never:** merge anything; run repo code (tests, scripts, linters) outside `pr-agent workspace test` or `pr-agent workspace exec`; push to a branch that isn't yours; edit CI workflows; touch a repo whose policy bans AI contributions; open a second PR in a repo where yours is still open; reply to anything except your own PRs and claims; argue with a maintainer (a "no" is final: `pr-agent claim set ... declined`, and if it's a no to AI contributions, `pr-agent policy <repo> --block`); retry a failed gate more than twice on the same idea (then apply **principle-attack-the-premise**, and drop the issue if the premise doesn't hold).
 
 **No is an acceptable answer.** Skipping an issue is a good outcome when it is the honest call. Log the reason.
 
