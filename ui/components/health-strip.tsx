@@ -3,9 +3,9 @@ import type { Health } from "@/lib/derive";
 import { ago, clock } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
-// No heartbeat file: liveness is read from the newest ledger rows. The dataset
-// mirror runs every 30 minutes, so anything older than 2 hours is worth a look.
-const STALE_MS = 2 * 60 * 60 * 1000;
+// No heartbeat file: liveness is read from the newest ledger rows. Runs start every
+// 4 hours and the mirror can lag a few minutes, so only a gap past 5 hours is worth a look.
+const STALE_MS = 5 * 60 * 60 * 1000;
 
 export function HealthStrip({ health, now }: { health: Health; now: string }) {
   const stale = !health.lastActivity || Date.parse(now) - Date.parse(health.lastActivity) > STALE_MS;

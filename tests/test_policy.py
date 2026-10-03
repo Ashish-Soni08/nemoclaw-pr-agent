@@ -1,4 +1,7 @@
 import base64
+import json
+
+import pytest
 
 from pr_agent.policy import apply_maintainer_stance, check, classify
 
@@ -81,3 +84,21 @@ def test_unclear_only_continues_when_switched_on(gh, fake, tmp_path):
     fake.add("GET", "/repos/o/r/contents/CONTRIBUTING.md", b64("Thanks for contributing!"))
     v = check(gh, "o/r", tmp_path)
     assert not v.permits() and v.permits(allow_unclear=True)
+
+
+@pytest.mark.parametrize("text", [
+    "No AI-generated code.",
+    "We don't want AI-generated pull requests.",
+    "Please refrain from submitting LLM-generated PRs.",
+    "- No AI contributions, please.",
+])
+def test_plain_bans_are_bans(text):
+    assert classify({"CONTRIBUTING.md": text}, [])[0] == "bans"
+
+
+def test_block_list_ignores_case(tmp_path):
+    from pr_agent.policy import block, is_blocked
+    block(tmp_path, "Org/Repo", "no AI please", "https://github.com/Org/Repo/issues/1#c")
+    assert is_blocked(tmp_path, "org/repo")
+    block(tmp_path, "org/repo", "again", "x")
+    assert len(json.loads((tmp_path / "blocked.json").read_text())) == 1

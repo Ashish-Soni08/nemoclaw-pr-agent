@@ -19,12 +19,12 @@ from .devindex import DevIndex
 from .discover import DiscoveryRun
 from .github import GitHub
 from .ledger import Ledger, append_tsv, sync_to_dataset
-from .publish import Refused, Registry, ack_comments, check_changes, claim_updates, open_pr, post_claim, pr_updates, record_gate
+from .publish import Refused, Registry, ack_comments, check_changes, claim_updates, gated_tree, open_pr, post_claim, pr_updates, record_gate
 from .state import CreditBook, SeenStore, read_json, write_json
 from .spend import append_tokens, snapshot as spend_snapshot
 from .summary import compact_candidates, daily_digest, run_summary
 from .usage import menu, report, router_models
-from .workspace import Meta, diff_hash, diff_text, prepare, run_tests, setup_env
+from .workspace import Meta, diff_text, prepare, run_tests, setup_env
 
 
 def out(data: Any) -> None:
@@ -462,6 +462,19 @@ def _body(path: str) -> str:
     return text
 
 
+def followup_target(app: App, key: str) -> dict[str, Any]:
+    """One of the agent's own open PRs, in a repo that hasn't told the agent to leave."""
+    rec = app.registry.prs().get(key)
+    if not rec:
+        raise SystemExit(f"{key} is not one of the agent's PRs")
+    if rec.get("state", "open") != "open":
+        raise Refused(f"{key} is {rec['state']}; the agent only follows up on open PRs")
+    stop = policy_mod.is_blocked(app.s.state_dir / "policy", rec["repo"])
+    if stop:
+        raise Refused(f"{rec['repo']} asked the agent to leave: {stop['why'][:160]}")
+    return rec
+
+
 def pr_cmd(app: App, a: argparse.Namespace) -> int:
     gh = app.gh()
     limits = app.s.agent.get("limits", {})
@@ -475,9 +488,7 @@ def pr_cmd(app: App, a: argparse.Namespace) -> int:
     elif a.pcmd == "updates":
         out({"prs": pr_updates(gh, app.registry, app.ledger)})
     elif a.pcmd in ("reply", "comment"):
-        rec = app.registry.prs().get(a.key)
-        if not rec:
-            raise SystemExit(f"{a.key} is not one of the agent's PRs")
+        rec = followup_target(app, a.key)
         body = _body(a.body_file)
         if a.pcmd == "reply":
             res = gh.reply_review_comment(rec["repo"], rec["number"], a.comment_id, body)
@@ -491,15 +502,14 @@ def pr_cmd(app: App, a: argparse.Namespace) -> int:
         app.ledger.log("follow-up.ack", a.key, f"no reply needed for {len(a.ids)} comments", a.why, " ".join(map(str, a.ids)), "acked")
         out({"acked": a.ids})
     elif a.pcmd == "push":
-        rec = app.registry.prs().get(a.key)
-        if not rec:
-            raise SystemExit(f"{a.key} is not one of the agent's PRs")
+        rec = followup_target(app, a.key)
         meta = Meta.load(Path(rec["workspace"]))
-        gate = read_json(Path(meta.path) / ".pr-agent" / "gate.json", {})
-        if gate.get("verdict") != "pass" or gate.get("diff_hash") != diff_hash(Path(meta.path), meta.base_sha):
-            raise Refused("run the self-review gate on the updated diff before pushing")
+        try:
+            tree = gated_tree(meta)
+        except Refused:
+            raise Refused("run the self-review gate on the updated diff before pushing") from None
         fork = gh.ensure_fork(meta.repo)
-        sha = gh.push_files(fork, meta.branch, meta.base_sha, check_changes(meta, app.s.agent.get("limits", {})), a.message)
+        sha = gh.push_files(fork, meta.branch, meta.base_sha, check_changes(meta, app.s.agent.get("limits", {}), tree), a.message)
         app.registry.save_pr(a.key, {"commit": sha})
         app.ledger.log("follow-up.push", a.key, "pushed review fixes", a.message, sha, "pushed")
         out({"commit": sha})

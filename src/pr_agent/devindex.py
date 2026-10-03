@@ -63,7 +63,7 @@ class DevIndex:
     run: str
     max_per_run: int = 30
     max_per_month: int = 900
-    spent_this_run: int = field(default=0, init=False)
+    _spent_here: int = field(default=0, init=False)
 
     @classmethod
     def create(cls, api_key: str, book: CreditBook, run: str, **caps: int) -> "DevIndex":
@@ -72,6 +72,12 @@ class DevIndex:
 
     def month_spent(self) -> int:
         return self.book.spent(month=datetime.now(timezone.utc).strftime("%Y-%m"))
+
+    @property
+    def spent_this_run(self) -> int:
+        # Read from the credit book, so separate pr-agent calls in one run share the backstop.
+        # Outside a run (manual calls) there is no run id to key on, so count this process only.
+        return self.book.spent(run=self.run) if self.run else self._spent_here
 
     def can_spend(self, k: int) -> bool:
         cost = credits_for(k)
@@ -88,7 +94,7 @@ class DevIndex:
         if not resp.ok:
             return SearchResult(body, [], {}, 0, resp.status, qh, skipped=_err(resp))
         cost = credits_for(k)
-        self.spent_this_run += cost
+        self._spent_here += cost
         self.book.add(self.run, cost, qh)
         data = resp.json() or {}
         payload = data.get("data", data)

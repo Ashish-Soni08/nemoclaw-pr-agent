@@ -162,8 +162,10 @@ function spendPerDay(spend: Spend[], provider: string, days: string[]): { day: s
     if (cur === undefined) return { day: d, amount: 0 };
     const before = known.filter((k) => k < d).at(-1);
     const prev = before ? endOfDay.get(before)! : 0;
-    // A drop means the running total was reset (new month); the new total is that day's spend.
-    return { day: d, amount: cur >= prev ? cur - prev : cur };
+    // Hugging Face and Firecrawl report month-to-date totals, so a new month starts from zero.
+    // A drop also means the running total was reset; either way the new total is that day's spend.
+    const newMonth = provider !== "lambda" && before !== undefined && before.slice(0, 7) !== d.slice(0, 7);
+    return { day: d, amount: !newMonth && cur >= prev ? cur - prev : cur };
   });
 }
 

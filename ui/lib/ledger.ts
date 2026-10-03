@@ -103,6 +103,10 @@ function toTokens(text: string): TokenRow[] {
   }));
 }
 
+// A 404 on these means a wrong dataset name or a token that can't see it, not an empty
+// ledger, so it fails the render and the last good page stays up.
+const REQUIRED = new Set(["decisions.tsv", "spend.tsv"]);
+
 async function fromDataset(dataset: string, file: string): Promise<string> {
   // The dataset is private, so the read token stays on the server.
   const headers: Record<string, string> = {};
@@ -111,7 +115,7 @@ async function fromDataset(dataset: string, file: string): Promise<string> {
     headers,
     next: { revalidate: 300 },
   });
-  if (res.status === 404) return "";
+  if (res.status === 404 && !REQUIRED.has(file)) return "";
   if (!res.ok) throw new Error(`Could not read ledger/${file} from dataset ${dataset}: HTTP ${res.status}`);
   return res.text();
 }
