@@ -50,7 +50,7 @@ def test_current_run_ignores_finished_and_stale_runs(tmp_path):
         ("2026-10-04T16:00:00Z", "old", "start"),  # never ended, but too long ago
         ("2026-10-04T18:30:00Z", "done", "start"), ("2026-10-04T18:40:00Z", "done", "run.end"),
         ("2026-10-04T19:30:00Z", "live", "start"),
-        ("2026-10-04T18:00:00Z", "crashed", "start"),  # quiet for 45+ minutes
+        ("2026-10-04T18:00:00Z", "crashed", "start"),  # quiet for 70+ minutes
     ]
     led.write_text("ts\trun\tphase\tsubject\n" + "".join(f"{t}\t{r}\t{p}\tx\n" for t, r, p in rows))
     assert hs.current_run(led, NOW) == "live"

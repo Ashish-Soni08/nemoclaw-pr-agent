@@ -26,7 +26,8 @@ AGENT_PROCS = os.environ.get("PR_AGENT_PROC_PATTERN", r"openshell|nemoclaw|herme
 CGROUP_ROOT = Path("/sys/fs/cgroup")
 # A run with no end row (a crashed session) stops counting as in progress after this long.
 RUN_MAX = timedelta(hours=2)
-RUN_QUIET = timedelta(minutes=45)
+# Longer than a fix sub-agent may work without writing a ledger row (its timeout is 60 min).
+RUN_QUIET = timedelta(minutes=70)
 DISK_EVERY = timedelta(minutes=15)
 
 

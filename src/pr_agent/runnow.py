@@ -16,7 +16,8 @@ from typing import Any
 NEAR = timedelta(minutes=30)
 # A run with no end row (a crashed session) stops counting as in progress after this long.
 RUN_MAX = timedelta(hours=2)
-RUN_QUIET = timedelta(minutes=45)
+# Longer than a fix sub-agent may work without writing a ledger row (its timeout is 60 min).
+RUN_QUIET = timedelta(minutes=70)
 
 
 def _field(spec: str, lo: int, hi: int) -> set[int]:
