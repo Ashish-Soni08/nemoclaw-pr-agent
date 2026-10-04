@@ -17,6 +17,10 @@ export type Credit = {
   limit: number | null;
   spent: number;
   hours: number | null;
+  // From the Lambda row's source: "... <name> running since 2026-10-02 18:28 UTC".
+  runningSince: string | null;
+  // First day the Lambda cost switched from uptime to wall-clock billing; that day carries the catch-up.
+  billingChangedOn: string | null;
   fromProvider: boolean;
   source: string;
   daily: { day: string; amount: number }[];
@@ -189,6 +193,11 @@ function credits(spend: Spend[], now: string): Credit[] {
       limit: latest.limit,
       spent: value(latest),
       hours: provider === "lambda" ? latest.used : null,
+      runningSince: latest.source.match(/running since (\d{4}-\d{2}-\d{2} \d{2}:\d{2}) UTC/)?.[1] ?? null,
+      billingChangedOn:
+        provider === "lambda" && rows.some((r) => r.source.includes("uptime"))
+          ? day(rows.find((r) => r.source.includes("wall-clock"))?.ts ?? "") || null
+          : null,
       fromProvider: latest.source.startsWith("api"),
       source: latest.source,
       daily,
