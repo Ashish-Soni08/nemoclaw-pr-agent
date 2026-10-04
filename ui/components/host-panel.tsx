@@ -3,27 +3,25 @@ import type { HostMetric, HostView } from "@/lib/derive";
 import { ago, clock } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
-const NAME: Record<HostMetric["key"], string> = { cpu: "CPU", ram: "RAM", disk: "Disk" };
+const NAME: Record<HostMetric["key"], string> = { cpu: "CPU", ram: "Memory", disk: "Storage" };
 // More than two sync intervals without a new sample means the sampler or the sync stopped.
 const STALE_MS = 15 * 60 * 1000;
 const r1 = (v: number) => Math.round(v * 10) / 10;
-// The Lambda 1x A10 instance; fixed for this VM, so the sampler doesn't report it.
-const VM_CORES = 30;
 
 export function HostPanel({ host, now }: { host: HostView; now: string }) {
   if (!host) {
     return (
-      <section aria-label="VM resources" className="grid gap-2 rounded-lg border bg-card p-4">
-        <Label>VM resources</Label>
+      <section aria-label="Agent resources" className="grid gap-2 rounded-lg border bg-card p-4">
+        <Label>Agent resources</Label>
         <p className="text-sm text-muted-foreground">Waiting for the VM to report. The sampler writes ledger/host.tsv once a minute and it arrives with the next ledger sync.</p>
       </section>
     );
   }
   const stale = Date.parse(now) - Date.parse(host.asOf) > STALE_MS;
   return (
-    <section aria-label="VM resources" className="grid gap-3 rounded-lg border bg-card p-4">
+    <section aria-label="Agent resources" className="grid gap-3 rounded-lg border bg-card p-4">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <Label>VM resources</Label>
+        <Label>Agent resources on the VM</Label>
         <span className="text-xs text-muted-foreground">
           <span aria-hidden className={cn("mr-1.5 inline-block size-2 rounded-full align-[1px]", stale ? "bg-bad" : "bg-ok")} />
           Sampled every minute · as of <b className="font-mono text-foreground">{clock(host.asOf)} UTC</b>, {ago(host.asOf, now)}
@@ -39,7 +37,6 @@ export function HostPanel({ host, now }: { host: HostView; now: string }) {
           <i className="inline-block h-2.5 w-3.5 border bg-accent" />
           agent run in progress
         </span>
-        <span>Big numbers are the whole VM, including work that isn’t the agent (such as model experiments). “Agent” is the agent’s own share.</span>
         <span>Last 6 hours · hover a chart for the peak</span>
       </div>
     </section>
@@ -47,23 +44,20 @@ export function HostPanel({ host, now }: { host: HostView; now: string }) {
 }
 
 function Metric({ m, running }: { m: HostMetric; running: boolean[] }) {
-  const pct = m.key === "cpu";
-  const unit = pct ? "%" : " GB";
+  const unit = m.key === "cpu" ? " cores" : " GB";
   const values = m.series.filter((v): v is number => v !== null);
   const peak = values.length ? Math.max(...values) : null;
   return (
     <div className="grid min-w-0 content-start gap-1.5 border-dashed py-3 first:pt-0 not-first:border-t sm:py-0 sm:pr-4 sm:not-first:border-t-0 sm:not-first:border-l sm:not-first:pl-4">
       <Label>{NAME[m.key]}</Label>
       <div className="font-mono text-[22px] leading-tight font-semibold">
-        {m.now === null ? "–" : pct ? `${Math.round(m.now * 10) / 10}%` : Math.round(m.now * 10) / 10}{" "}
-        <small className="text-xs font-normal text-muted-foreground">{pct ? `of ${VM_CORES} cores` : m.total !== null ? `of ${Math.round(m.total).toLocaleString("en")} GB` : "GB"}</small>
+        {m.now === null ? "–" : r1(m.now)}{" "}
+        <small className="text-xs font-normal text-muted-foreground">
+          {m.key === "cpu" ? "cores" : "GB"}
+          {m.total !== null ? ` of ${Math.round(m.total).toLocaleString("en")}${m.key === "cpu" ? "" : " GB"}` : ""}
+        </small>
       </div>
-      <span className="text-xs text-muted-foreground">
-        {m.key === "disk" ? "Agent workspaces" : "Agent"}{" "}
-        <b className="font-mono font-medium text-foreground">{m.agent === null ? "–" : m.key === "cpu" ? `${r1(m.agent)} cores` : `${r1(m.agent)} GB`}</b>
-        {m.extra ? ` · ${m.extra}` : null}
-      </span>
-      <Spark series={m.series} running={running} label={`${NAME[m.key]}, last 6 hours${peak === null ? "" : `, peak ${Math.round(peak * 10) / 10}${unit}`}`} />
+      <Spark series={m.series} running={running} label={`Agent ${NAME[m.key]}, last 6 hours${peak === null ? "" : `, peak ${r1(peak)}${unit}`}`} />
     </div>
   );
 }

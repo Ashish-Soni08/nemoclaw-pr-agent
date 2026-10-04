@@ -71,8 +71,6 @@ export type HostMetric = {
   key: "cpu" | "ram" | "disk";
   now: number | null;
   total: number | null;
-  agent: number | null;
-  extra: string | null;
   series: (number | null)[];
 };
 
@@ -347,7 +345,8 @@ function models(tokens: TokenRow[]): ModelUse[] {
 }
 
 const HOST_WINDOW_MS = 6 * 60 * 60 * 1000;
-const fixed1 = (v: number | null) => (v === null ? null : Math.round(v * 10) / 10);
+// The Lambda 1x A10 instance has 30 cores; fixed for this VM, so the sampler doesn't report it.
+const VM_CORES = 30;
 
 function host(rows: HostRow[]): HostView {
   const latest = rows.at(-1);
@@ -359,24 +358,11 @@ function host(rows: HostRow[]): HostView {
     asOf: latest.ts,
     times: window.map((r) => r.ts),
     running: window.map((r) => r.run !== "-"),
+    // Only the agent's own share goes to the page; machine-wide use (other work on the VM) stays private.
     metrics: [
-      {
-        key: "cpu",
-        now: latest.cpu_pct,
-        total: 100,
-        agent: latest.agent_cpu_cores,
-        extra: latest.load1 !== null ? `load ${latest.load1}` : null,
-        series: pick((r) => r.cpu_pct),
-      },
-      {
-        key: "ram",
-        now: latest.ram_used_gb,
-        total: latest.ram_total_gb,
-        agent: latest.agent_ram_gb,
-        extra: latest.ram_used_gb !== null && latest.agent_ram_gb !== null ? `everything else ${fixed1(Math.max(latest.ram_used_gb - latest.agent_ram_gb, 0))} GB` : null,
-        series: pick((r) => r.ram_used_gb),
-      },
-      { key: "disk", now: latest.disk_used_gb, total: latest.disk_total_gb, agent: latest.agent_disk_gb, extra: null, series: pick((r) => r.disk_used_gb) },
+      { key: "cpu", now: latest.agent_cpu_cores, total: VM_CORES, series: pick((r) => r.agent_cpu_cores) },
+      { key: "ram", now: latest.agent_ram_gb, total: latest.ram_total_gb, series: pick((r) => r.agent_ram_gb) },
+      { key: "disk", now: latest.agent_disk_gb, total: latest.disk_total_gb, series: pick((r) => r.agent_disk_gb) },
     ],
   };
 }

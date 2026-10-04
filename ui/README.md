@@ -36,7 +36,7 @@ All numbers are computed in `lib/derive.ts` from those two files:
 - **Repos**: the latest `policy` row per repo.
 - **Runs tab**: one row per `run` id. Found = `discover.verify` rows, attempted = issues with `fix.*` rows, passed gate = `gate` rows with result `pass`, merged/closed = `pr.outcome` rows (matched to the run's `pr.opened` by issue). State: `guard`+`skipped` is stopped by budget, `run.end` is finished, otherwise stalled (or failed, if it logged an error) once the newest row is 2 hours old.
 - **Gate rejections**: `gate` rows whose result isn't `pass`, plus `pr.refused` rows, with the `why` as the reason.
-- **VM resources**: `ledger/host.tsv`, one sample a minute from a sampler on the VM (`ts run cpu_pct load1 ram_used_gb ram_total_gb gpu_util_pct vram_used_gb vram_total_gb disk_used_gb disk_total_gb agent_cpu_cores agent_ram_gb agent_vram_gb agent_disk_gb`). The panel shows the newest sample, the agent's share, and the last 6 hours with runs (`run` other than `-`) shaded. It arrives with the ledger sync, so it runs a few minutes behind; the page never talks to the VM.
+- **Agent resources**: from `ledger/host.tsv` (one sample a minute from a sampler on the VM), only the agent's own CPU cores, memory and workspace storage, with the last 6 hours and runs shaded. Machine-wide columns in the file are not sent to the page. It arrives with the ledger sync, so it runs a few minutes behind; the page never talks to the VM.
 - **Run drill-down**: click a run for the settings it started with (`ledger/run_config.tsv`) and, per issue it worked on, which model did each step with tokens and cost (`ledger/tokens.tsv`).
 - **Tokens by model**: sums of `ledger/tokens.tsv`.
 
