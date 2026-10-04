@@ -155,6 +155,18 @@ class App:
         result["credits_run"] = index.spent_this_run
         return result
 
+    def code_drift(self, run: str) -> str:
+        """The agent must never edit its own code; a changed checkout is logged for a human."""
+        try:
+            changed = subprocess.run(["git", "-C", str(REPO_ROOT), "status", "--porcelain", "--untracked-files=no"], capture_output=True, text=True, timeout=10).stdout.rstrip()
+        except (OSError, subprocess.SubprocessError):
+            return ""
+        if not changed:
+            return ""
+        files = ", ".join(line[3:] for line in changed.splitlines()[:5])
+        self.ledger.log("tool.error", run, "pr-agent's own code was changed since deploy", "only humans change the agent's tools; redeploy to restore", files, "drift")
+        return f"pr-agent's own code was changed since deploy ({files}). Don't edit it; mention this in the summary."
+
     def prestep_run(self) -> dict[str, Any]:
         g = self.guard()
         if g.over:
@@ -172,7 +184,10 @@ class App:
         if not cands and not follow:
             self.ledger.log("run.end", run, "nothing to do", "no candidates passed checks and nothing to follow up", result["candidates_path"], "idle")
             return {"wakeAgent": True, "context": {"run": run, "candidates": [], "discovery": result, "next": "No work. Run `pr-agent summary run` and reply with its output."}}
-        return {"wakeAgent": True, "context": {"run": run, "candidates": compact_candidates(cands), "discovery": {k: result[k] for k in ("hits", "verified", "candidates", "credits_run", "credits_month") if k in result}, "follow_up": follow, "usage_today_usd": g.day_usd}}
+        ctx = {"run": run, "candidates": compact_candidates(cands), "discovery": {k: result[k] for k in ("hits", "verified", "candidates", "credits_run", "credits_month") if k in result}, "follow_up": follow, "usage_today_usd": g.day_usd}
+        if drift := self.code_drift(run):
+            ctx["warning"] = drift
+        return {"wakeAgent": True, "context": ctx}
 
     def _follow_up_items(self) -> dict[str, Any]:
         if not self.registry.prs() and not self.registry.claims():
@@ -189,7 +204,10 @@ class App:
         if not items:
             return {"wakeAgent": False}
         run = self.run_start("follow-up")
-        return {"wakeAgent": True, "context": {"run": run, "follow_up": items}}
+        ctx = {"run": run, "follow_up": items}
+        if drift := self.code_drift(run):
+            ctx["warning"] = drift
+        return {"wakeAgent": True, "context": ctx}
 
 
 def build_parser() -> argparse.ArgumentParser:

@@ -26,8 +26,10 @@ from .state import read_json, write_json
 SAFE_ENV_KEYS = {
     "PATH", "HOME", "LANG", "LC_ALL", "TERM", "TMPDIR", "PIP_INDEX_URL", "PIP_CACHE_DIR",
     "HTTPS_PROXY", "HTTP_PROXY", "NO_PROXY", "SSL_CERT_FILE", "REQUESTS_CA_BUNDLE",
-    "NODE_EXTRA_CA_CERTS",
+    "NODE_EXTRA_CA_CERTS", "CURL_CA_BUNDLE", "GIT_SSL_CAINFO", "PIP_CERT",
 }
+# git and curl ignore SSL_CERT_FILE, so clones and installs behind the egress proxy need their own.
+CA_ALIASES = ("GIT_SSL_CAINFO", "CURL_CA_BUNDLE")
 # Untracked build output that must never end up in a PR.
 EXCLUDES = (".pr-agent/", ".venv-pr-agent/", "node_modules/")
 
@@ -35,6 +37,9 @@ EXCLUDES = (".pr-agent/", ".venv-pr-agent/", "node_modules/")
 def scrubbed_env(extra: dict[str, str] | None = None) -> dict[str, str]:
     """Repo code (tests, setup.py, install scripts) gets no tokens, keys or placeholders."""
     env = {k: v for k, v in os.environ.items() if k in SAFE_ENV_KEYS}
+    if env.get("SSL_CERT_FILE"):
+        for k in CA_ALIASES:
+            env.setdefault(k, env["SSL_CERT_FILE"])
     env.update(extra or {})
     return env
 

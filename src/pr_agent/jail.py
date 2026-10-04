@@ -127,7 +127,7 @@ def restrict(write: Iterable[str | Path], read: Iterable[str | Path] = ()) -> No
 # Toolchains repo code needs, wherever they're installed (a Node under ~/.nvm, say).
 TOOLS = ["python3", "node", "npm", "npx", "yarn", "corepack", "git"]
 # CA bundles for the egress proxy, which may live outside the system trees.
-CA_VARS = ["SSL_CERT_FILE", "REQUESTS_CA_BUNDLE", "NODE_EXTRA_CA_CERTS", "PIP_CERT", "CURL_CA_BUNDLE"]
+CA_VARS = ["SSL_CERT_FILE", "REQUESTS_CA_BUNDLE", "NODE_EXTRA_CA_CERTS", "PIP_CERT", "CURL_CA_BUNDLE", "GIT_SSL_CAINFO"]
 
 
 def _toolchain_roots(home: Path) -> list[str]:
