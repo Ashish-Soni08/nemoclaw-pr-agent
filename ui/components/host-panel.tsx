@@ -7,6 +7,8 @@ const NAME: Record<HostMetric["key"], string> = { cpu: "CPU", ram: "RAM", disk: 
 // More than two sync intervals without a new sample means the sampler or the sync stopped.
 const STALE_MS = 15 * 60 * 1000;
 const r1 = (v: number) => Math.round(v * 10) / 10;
+// The Lambda 1x A10 instance; fixed for this VM, so the sampler doesn't report it.
+const VM_CORES = 30;
 
 export function HostPanel({ host, now }: { host: HostView; now: string }) {
   if (!host) {
@@ -54,7 +56,7 @@ function Metric({ m, running }: { m: HostMetric; running: boolean[] }) {
       <Label>{NAME[m.key]}</Label>
       <div className="font-mono text-[22px] leading-tight font-semibold">
         {m.now === null ? "–" : pct ? `${Math.round(m.now * 10) / 10}%` : Math.round(m.now * 10) / 10}{" "}
-        <small className="text-xs font-normal text-muted-foreground">{pct ? "of all cores" : m.total !== null ? `of ${Math.round(m.total).toLocaleString("en")} GB` : "GB"}</small>
+        <small className="text-xs font-normal text-muted-foreground">{pct ? `of ${VM_CORES} cores` : m.total !== null ? `of ${Math.round(m.total).toLocaleString("en")} GB` : "GB"}</small>
       </div>
       <span className="text-xs text-muted-foreground">
         {m.key === "disk" ? "Agent workspaces" : "Agent"}{" "}
