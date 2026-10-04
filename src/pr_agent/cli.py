@@ -21,7 +21,7 @@ from .github import GitHub
 from .ledger import Ledger, append_tsv, sync_to_dataset
 from .publish import Refused, Registry, ack_comments, check_changes, claim_updates, gated_tree, open_pr, post_claim, pr_updates, record_gate
 from .state import CreditBook, SeenStore, read_json, write_json
-from .spend import append_tokens, snapshot as spend_snapshot
+from .spend import append as append_spend, append_tokens, huggingface_billed, snapshot as spend_snapshot
 from .summary import compact_candidates, daily_digest, run_summary
 from .usage import menu, report, router_models
 from .jail import IsolationUnavailable
@@ -84,8 +84,11 @@ class App:
         key = os.environ.get("PRAGENT_FIRECRAWL_KEY") or os.environ.get("FIRECRAWL_API_KEY", "")
         return spend_snapshot(self.s.state_dir, self.s.ledger_dir, self.s.agent, hf_month_usd, key)
 
-    def ledger_url(self) -> str:
+    def ledger_url(self, for_summary: bool = False) -> str:
         led = self.s.agent.get("ledger", {})
+        # The dataset is private, so the summary links the public dashboard instead.
+        if for_summary and led.get("dashboard_url"):
+            return led["dashboard_url"]
         if led.get("public_url"):
             return led["public_url"]
         repo = os.environ.get("LEDGER_DATASET") or led.get("hf_dataset", "")
@@ -110,6 +113,8 @@ class App:
             sha = subprocess.run(["git", "-C", str(REPO_ROOT), "rev-parse", "--short", "HEAD"], capture_output=True, text=True, timeout=10).stdout.strip()
         except (OSError, subprocess.SubprocessError):
             sha = ""
+        if not sha and (REPO_ROOT / ".deployed-commit").exists():
+            sha = (REPO_ROOT / ".deployed-commit").read_text().strip()
         if not sha and cfg_path.exists():
             sha = "sha256:" + hashlib.sha256(cfg_path.read_bytes()).hexdigest()[:7]
         entries = menu(self.s.agent)
@@ -157,13 +162,18 @@ class App:
 
     def code_drift(self, run: str) -> str:
         """The agent must never edit its own code; a changed checkout is logged for a human."""
-        try:
-            changed = subprocess.run(["git", "-C", str(REPO_ROOT), "status", "--porcelain", "--untracked-files=no"], capture_output=True, text=True, timeout=10).stdout.rstrip()
-        except (OSError, subprocess.SubprocessError):
+        manifest = REPO_ROOT / ".deployed-manifest"
+        if not manifest.exists():
             return ""
+        changed = []
+        for line in manifest.read_text().splitlines():
+            digest, _, rel = line.partition("  ")
+            path = REPO_ROOT / rel
+            if not path.is_file() or hashlib.sha256(path.read_bytes()).hexdigest() != digest:
+                changed.append(rel)
         if not changed:
             return ""
-        files = ", ".join(line[3:] for line in changed.splitlines()[:5])
+        files = ", ".join(changed[:5])
         self.ledger.log("tool.error", run, "pr-agent's own code was changed since deploy", "only humans change the agent's tools; redeploy to restore", files, "drift")
         return f"pr-agent's own code was changed since deploy ({files}). Don't edit it; mention this in the summary."
 
@@ -416,7 +426,7 @@ def dispatch(app: App, a: argparse.Namespace) -> int:  # noqa: C901 - flat comma
                 fc = budgets["firecrawl"]
                 usage += f" · {fc.used:,.0f} / {fc.limit / 1000:,.0f}k Firecrawl"
             app.run_tokens(run)
-            out(run_summary(app.ledger.run_rows(run), app.registry, run, usage, app.ledger_url()))
+            out(run_summary(app.ledger.run_rows(run), app.registry, run, usage, app.ledger_url(for_summary=True)))
             app.ledger.log("run.end", run, "sent run summary", "end of run", "telegram", "done")
         else:
             g = app.guard()
@@ -452,7 +462,12 @@ def dispatch(app: App, a: argparse.Namespace) -> int:  # noqa: C901 - flat comma
             repo = os.environ.get("LEDGER_DATASET") or app.s.agent.get("ledger", {}).get("hf_dataset", "")
             if not repo:
                 raise SystemExit("set LEDGER_DATASET (e.g. your-name/pr-agent-ledger)")
-            out({"synced_to": sync_to_dataset(app.s.ledger_dir, repo, os.environ.get("HF_TOKEN"))})
+            token = os.environ.get("HF_TOKEN")
+            # Host-side only: add HF's own bill, which the sandbox (no billing token) can't read.
+            billed = huggingface_billed(token, app.s.agent.get("usage", {}).get("monthly_budget_usd", 20)) if token else None
+            if billed:
+                append_spend(app.s.ledger_dir / "spend.tsv", [billed])
+            out({"synced_to": sync_to_dataset(app.s.ledger_dir, repo, token), "hf_billed_usd": billed.cost_usd if billed else None})
     return 0
 
 

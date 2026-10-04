@@ -14,6 +14,11 @@ trap 'rm -rf "$stage"' EXIT
 mkdir "$stage/$(basename "$SANDBOX_REPO")"
 { git -C "$REPO_DIR" ls-files -z -co --exclude-standard; printf '.git\0'; } \
   | tar -C "$REPO_DIR" --null -T - -cf - | tar -C "$stage/$(basename "$SANDBOX_REPO")" -xf -
+# The upload drops .git, so record what was deployed: the commit, and a checksum of every file
+# the agent runs, which each run's pre-step compares to catch the agent editing its own code.
+git -C "$REPO_DIR" rev-parse --short HEAD > "$stage/$(basename "$SANDBOX_REPO")/.deployed-commit"
+( cd "$stage/$(basename "$SANDBOX_REPO")" && find bin src skills hermes config -type f ! -name '*.pyc' -print0 | sort -z | xargs -0 sha256sum ) \
+  > "$stage/$(basename "$SANDBOX_REPO")/.deployed-manifest"
 nemohermes "$SANDBOX" exec -- rm -rf "$SANDBOX_REPO"
 nemohermes "$SANDBOX" upload "$stage/$(basename "$SANDBOX_REPO")" /sandbox/
 nemohermes "$SANDBOX" exec -- bash -c "test -x $SANDBOX_REPO/bin/pr-agent && mkdir -p /sandbox/.local/bin && ln -sf $SANDBOX_REPO/bin/pr-agent /sandbox/.local/bin/pr-agent"

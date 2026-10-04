@@ -51,6 +51,32 @@ def huggingface(month_usd: float, budget: float) -> SpendRow:
                     "estimate:hermes-state.db tokens x provider prices, cached input at the cache rate (month to date)")
 
 
+HF_URL = "https://huggingface.co"
+
+
+def huggingface_billed(token: str, budget: float, client: Client | None = None, now: datetime | None = None) -> SpendRow | None:
+    """Hugging Face's own month-to-date Inference Providers bill, or None if the endpoint won't say.
+
+    The endpoint is what HF's billing page uses (undocumented), so the guard's estimate stays the
+    budget check and the fallback. It needs a token with "Read billing usage", which only the host has.
+    """
+    now = now or datetime.now(timezone.utc)
+    start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    end = start.replace(year=start.year + 1, month=1) if start.month == 12 else start.replace(month=start.month + 1)
+    c = client or Client(HF_URL, headers={"Authorization": f"Bearer {token}"})
+    try:
+        # Dates are Unix seconds; milliseconds are refused as "more than one billing period in the future".
+        resp = c.request("GET", f"/api/settings/billing/usage-v2?startDate={int(start.timestamp())}&endDate={int(end.timestamp())}")
+        if not resp.ok:
+            return None
+        ip = ((resp.json() or {}).get("usage") or {}).get("inferenceProviders") or {}
+        used = round(float(ip["usedNanoUsd"]) / 1e9, 4)
+    except (OSError, ValueError, KeyError, TypeError):
+        return None
+    return SpendRow("huggingface", used, "usd", used, round(max(budget - used, 0), 4), budget,
+                    f"api:/api/settings/billing/usage-v2 inferenceProviders ({ip.get('numRequests', '?')} requests, month to date)")
+
+
 def firecrawl(book: CreditBook, plan_credits: int, api_key: str = "", client: Client | None = None) -> SpendRow:
     month = datetime.now(timezone.utc).strftime("%Y-%m")
     used = book.spent(month=month)

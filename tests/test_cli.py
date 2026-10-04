@@ -23,6 +23,7 @@ def test_log_show_and_summary(home, capsys):
     text = capsys.readouterr().out
     assert "**PR agent run**" in text and "• [o/r#1](https://github.com/o/r/issues/1): clear repro" in text
     assert "💸 **Spend** $0.00 / $" in text
+    assert "📒 [Full ledger](https://nemoclaw-pr-agent-ledger.vercel.app)" in text
     spend = (home / "ledger" / "spend.tsv").read_text().splitlines()
     assert spend[0].split("\t") == ["ts", "provider", "used", "unit", "cost_usd", "remaining", "limit", "source"]
     assert [l.split("\t")[1] for l in spend[1:]] == ["huggingface", "firecrawl", "lambda"]
@@ -76,12 +77,17 @@ def test_agent_side_drop_is_not_recorded_as_a_maintainer_no(home, capsys, monkey
     assert row[2:5] == ["claim.status", "issue:o/r#3", "claim dropped"]
 
 
-def test_changed_agent_code_is_logged_for_a_human(home, git_repo, monkeypatch):
+def test_changed_agent_code_is_logged_for_a_human(home, tmp_path, monkeypatch):
+    import hashlib
     from pr_agent.cli import App
-    monkeypatch.setattr(cli, "REPO_ROOT", git_repo)
+    repo = tmp_path / "deployed"
+    (repo / "src").mkdir(parents=True)
+    (repo / "src" / "pkg.py").write_text("x = 1\n")
+    (repo / ".deployed-manifest").write_text(hashlib.sha256(b"x = 1\n").hexdigest() + "  src/pkg.py\n")
+    monkeypatch.setattr(cli, "REPO_ROOT", repo)
     app = App()
     assert app.code_drift("r1") == ""
-    (git_repo / "pkg.py").write_text("def add(a, b):\n    return a + b\n")
-    assert "pkg.py" in app.code_drift("r1")
+    (repo / "src" / "pkg.py").write_text("x = 2\n")
+    assert "src/pkg.py" in app.code_drift("r1")
     row = (home / "ledger" / "decisions.tsv").read_text().splitlines()[-1].split("\t")
     assert row[2:5] == ["tool.error", "r1", "pr-agent's own code was changed since deploy"]
