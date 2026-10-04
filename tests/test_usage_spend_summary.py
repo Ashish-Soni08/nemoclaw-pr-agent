@@ -160,3 +160,36 @@ def test_router_models_pins_cheapest_provider_with_tools(monkeypatch):
     got = usage.router_models("https://router", "t")["a/m"]
     assert got["pin"] == "a/m:mid" and got["pin_price"] == [0.3, 0.5]
     assert [p["provider"] for p in got["providers"]] == ["cheap", "mid", "pricey"]
+
+
+def test_lambda_bills_wall_clock_since_launch():
+    from datetime import datetime, timezone
+    from pr_agent.spend import lambda_billed
+    insts = [{"name": "old", "launched_at": "2026-10-01T19:04:00Z", "ended_at": "2026-10-01T20:00:00Z"},
+             {"name": "vm", "launched_at": "2026-10-02T18:28:00Z"}]
+    row = lambda_billed(insts, 1.29, 500, now=datetime(2026, 10, 4, 18, 19, tzinfo=timezone.utc))
+    assert round(row.used, 2) == round(56 / 60 + 47 + 51 / 60, 2)
+    assert round(row.cost_usd, 2) == round(row.used * 1.29, 2)
+    assert "vm running since 2026-10-02 18:28 UTC" in row.source and "old" not in row.source
+
+
+def test_cached_input_is_priced_at_the_cache_rate():
+    glm = ModelEntry("zai-org/GLM-5.3", ["main"], 1.4, 4.4, price_cache_read=0.14)
+    # Oct 1-4 token totals from Hermes; Hugging Face billed $8.05 for them.
+    assert abs(glm.cost(845_539, 163_394 + 88_559, 41_475_520) - 8.05) < 0.1
+    assert ModelEntry("x", [], 1.0, 2.0).cost(0, 0, 1_000_000) == 0.1
+
+
+def test_firecrawl_remaining_comes_from_the_api(tmp_path):
+    class Resp:
+        ok = True
+        def json(self):
+            return {"success": True, "data": {"remainingCredits": 73633, "planCredits": 1000}}
+    class C:
+        def request(self, method, path):
+            return Resp()
+    book = CreditBook(tmp_path / "c.tsv")
+    book.add("r", 396, "q")
+    row = firecrawl(book, 70000, client=C())
+    assert (row.used, row.remaining, row.limit) == (396, 73633, 74029)
+    assert row.source.startswith("api:")

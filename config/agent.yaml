@@ -48,6 +48,9 @@ models:
     # but NemoClaw's route drops a :provider pin, so the guard must not assume the cheapest.
     price_in: 1.4
     price_out: 4.4
+    # Cached input reads. Calibrated to Hugging Face's billing page on 2026-10-04 ($8.05 for 0.85M input,
+    # 41.5M cached, 0.25M output); other models default to 10% of price_in.
+    price_cache_read: 0.14
     note: main model (Ultra failed onboarding); triage, delegation, gate synthesis, PR text
   - id: moonshotai/Kimi-K2.7-Code
     roles: [candidate]
@@ -100,3 +103,11 @@ spend:
   firecrawl_plan_credits: 70000 # Ashish's Firecrawl credit (2026-10-01)
   lambda_hourly_usd: 1.29       # 1x A10 on-demand (no V100 available on 2026-10-01)
   lambda_credit_usd: 500        # Ashish's Lambda credit (2026-10-01)
+  # Lambda bills from launch until the instance is terminated, whether the agent runs or not.
+  # Times from Lambda's usage page (Ashish, 2026-10-04). Add ended_at when an instance is terminated.
+  lambda_instances:
+    - name: claude-code
+      launched_at: "2026-10-01T19:04:00Z"
+      ended_at: "2026-10-01T20:00:00Z"
+    - name: nemoclaw-agent-challenge
+      launched_at: "2026-10-02T18:28:00Z"
