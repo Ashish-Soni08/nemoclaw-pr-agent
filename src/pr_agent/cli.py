@@ -21,7 +21,7 @@ from .github import GitHub
 from .ledger import Ledger, append_tsv, sync_to_dataset
 from .publish import Refused, Registry, ack_comments, check_changes, claim_updates, gated_tree, open_pr, post_claim, pr_updates, record_gate
 from .state import CreditBook, SeenStore, read_json, write_json
-from .spend import append_tokens, snapshot as spend_snapshot
+from .spend import append as append_spend, append_tokens, huggingface_billed, snapshot as spend_snapshot
 from .summary import compact_candidates, daily_digest, run_summary
 from .usage import menu, report, router_models
 from .jail import IsolationUnavailable
@@ -462,7 +462,12 @@ def dispatch(app: App, a: argparse.Namespace) -> int:  # noqa: C901 - flat comma
             repo = os.environ.get("LEDGER_DATASET") or app.s.agent.get("ledger", {}).get("hf_dataset", "")
             if not repo:
                 raise SystemExit("set LEDGER_DATASET (e.g. your-name/pr-agent-ledger)")
-            out({"synced_to": sync_to_dataset(app.s.ledger_dir, repo, os.environ.get("HF_TOKEN"))})
+            token = os.environ.get("HF_TOKEN")
+            # Host-side only: add HF's own bill, which the sandbox (no billing token) can't read.
+            billed = huggingface_billed(token, app.s.agent.get("usage", {}).get("monthly_budget_usd", 20)) if token else None
+            if billed:
+                append_spend(app.s.ledger_dir / "spend.tsv", [billed])
+            out({"synced_to": sync_to_dataset(app.s.ledger_dir, repo, token), "hf_billed_usd": billed.cost_usd if billed else None})
     return 0
 
 

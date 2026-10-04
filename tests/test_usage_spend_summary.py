@@ -206,3 +206,25 @@ def test_sessions_are_priced_as_the_served_model(tmp_path):
     con.commit(); con.close()
     assert report(db, MENU, 10, 0, now=now).month_usd == 0.6
     assert report(db, MENU, 10, 0, now=now, served_model="nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-FP8").month_usd == 0.5
+
+
+def test_huggingface_bill_comes_from_its_usage_endpoint():
+    from pr_agent.spend import huggingface_billed
+    seen = []
+    class Resp:
+        def __init__(self, ok):
+            self.ok = ok
+        def json(self):
+            return {"usage": {"inferenceProviders": {"usedNanoUsd": 10255033440, "numRequests": 1063}}}
+    class C:
+        def __init__(self, ok=True):
+            self.ok = ok
+        def request(self, method, path):
+            seen.append(path)
+            return Resp(self.ok)
+    row = huggingface_billed("t", 400, client=C(), now=datetime(2026, 10, 4, 19, tzinfo=timezone.utc))
+    assert (row.cost_usd, row.remaining, row.limit) == (10.255, 389.745, 400)
+    assert row.source.startswith("api:") and "1063 requests" in row.source
+    # Unix seconds for Oct 1 and Nov 1 UTC.
+    assert seen[0].endswith("startDate=1790812800&endDate=1793491200")
+    assert huggingface_billed("t", 400, client=C(ok=False)) is None
