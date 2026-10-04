@@ -1,4 +1,4 @@
-import type { ConfigRow, Decision, Ledger, Spend, TokenRow } from "./ledger";
+import type { ConfigRow, Decision, HostRow, Ledger, Spend, TokenRow } from "./ledger";
 
 // Everything the page shows is computed here from the two ledger files, so the
 // page can never show something the agent did not log.
@@ -67,6 +67,23 @@ export type Rejection = { ts: string; run: string; subject: string; phase: strin
 
 export type ModelUse = { model: string; runs: number; tokensIn: number; tokensOut: number; costUsd: number };
 
+export type HostMetric = {
+  key: "gpu" | "cpu" | "ram" | "disk";
+  now: number | null;
+  total: number | null;
+  agent: number | null;
+  extra: string | null;
+  series: (number | null)[];
+};
+
+export type HostView = {
+  asOf: string;
+  // Sample times and whether an agent run was in progress, aligned with each metric's series.
+  times: string[];
+  running: boolean[];
+  metrics: HostMetric[];
+} | null;
+
 export type DayTotals = { day: string; huggingface: number; lambda: number; firecrawl: number; prs: number };
 
 export type RepoRow = { repo: string; verdict: string; text: string; files: string; checked: string; prs: number };
@@ -81,6 +98,7 @@ export type View = {
   credits: Credit[];
   history: DayTotals[];
   runs: RunRow[];
+  host: HostView;
   rejections: Rejection[];
   models: ModelUse[];
   tokensFromSample: boolean;
@@ -328,6 +346,42 @@ function models(tokens: TokenRow[]): ModelUse[] {
   return [...m.values()].map(({ runSet, ...u }) => ({ ...u, runs: runSet.size })).sort((a, b) => b.costUsd - a.costUsd);
 }
 
+const HOST_WINDOW_MS = 6 * 60 * 60 * 1000;
+const fixed1 = (v: number | null) => (v === null ? null : Math.round(v * 10) / 10);
+
+function host(rows: HostRow[]): HostView {
+  const latest = rows.at(-1);
+  if (!latest) return null;
+  const since = new Date(Date.parse(latest.ts) - HOST_WINDOW_MS).toISOString();
+  const window = rows.filter((r) => r.ts >= since);
+  const pick = (f: (r: HostRow) => number | null) => window.map(f);
+  return {
+    asOf: latest.ts,
+    times: window.map((r) => r.ts),
+    running: window.map((r) => r.run !== "-"),
+    metrics: [
+      {
+        key: "gpu",
+        now: latest.gpu_util_pct,
+        total: 100,
+        agent: latest.agent_vram_gb,
+        extra: latest.vram_used_gb !== null && latest.vram_total_gb !== null ? `VRAM ${fixed1(latest.vram_used_gb)} of ${latest.vram_total_gb} GB` : null,
+        series: pick((r) => r.gpu_util_pct),
+      },
+      {
+        key: "cpu",
+        now: latest.cpu_pct,
+        total: 100,
+        agent: latest.agent_cpu_cores,
+        extra: latest.load1 !== null ? `load ${latest.load1}` : null,
+        series: pick((r) => r.cpu_pct),
+      },
+      { key: "ram", now: latest.ram_used_gb, total: latest.ram_total_gb, agent: latest.agent_ram_gb, extra: null, series: pick((r) => r.ram_used_gb) },
+      { key: "disk", now: latest.disk_used_gb, total: latest.disk_total_gb, agent: latest.agent_disk_gb, extra: null, series: pick((r) => r.disk_used_gb) },
+    ],
+  };
+}
+
 function health(entries: Entry[], latestRun: RunRow | undefined, now: string): Health {
   const starts = entries.filter((e) => e.phase === "start");
   const runState: Health["runState"] = latestRun?.state ?? "no runs yet";
@@ -374,6 +428,7 @@ export function derive(ledger: Ledger): View {
     credits: credits(ledger.spend, now),
     history: history(ledger.spend, entries, now),
     runs: runRows,
+    host: host(ledger.host),
     rejections: rejections(entries),
     models: models(ledger.tokens),
     tokensFromSample: ledger.origin.kind === "sample",

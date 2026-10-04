@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { CreditsPanel } from "@/components/credits-panel";
 import { EntryDetail } from "@/components/entry-detail";
 import { HealthStrip } from "@/components/health-strip";
+import { HostPanel } from "@/components/host-panel";
 import { RunsPanel } from "@/components/runs-panel";
 import { SpendHistory } from "@/components/spend-history";
 import { Label, OutcomePill, Pill, verdictTone } from "@/components/status";
@@ -64,6 +65,7 @@ export function Dashboard({ view }: { view: View }) {
         </header>
 
         <HealthStrip health={view.health} now={view.now} />
+        <HostPanel host={view.host} now={view.now} />
         <CreditsPanel credits={view.credits} />
         <SpendHistory days={view.history} />
 
