@@ -91,3 +91,33 @@ def test_changed_agent_code_is_logged_for_a_human(home, tmp_path, monkeypatch):
     assert "src/pkg.py" in app.code_drift("r1")
     row = (home / "ledger" / "decisions.tsv").read_text().splitlines()[-1].split("\t")
     assert row[2:5] == ["tool.error", "r1", "pr-agent's own code was changed since deploy"]
+
+
+def test_run_now_refuses_near_the_schedule_and_during_a_run(home, tmp_path, monkeypatch):
+    from datetime import datetime, timezone
+    from pr_agent import runnow
+    from pr_agent.cli import App, run_now
+    hermes = tmp_path / "hermes"
+    (hermes / "cron").mkdir(parents=True)
+    (hermes / "cron" / "jobs.json").write_text(json.dumps({"jobs": [{"id": "j1", "name": "pr-agent-run", "schedule": "0 */4 * * *"}]}))
+    started = []
+    monkeypatch.setattr(runnow, "start", lambda job_id, log: started.append(job_id))
+    monkeypatch.setattr(runnow, "cron_process_running", lambda: False)
+    app = App()
+    near = run_now(app, "owner asked", datetime(2026, 10, 4, 19, 45, tzinfo=timezone.utc))
+    assert near["started"] is False and "20:00 UTC, in 15 min" in near["reason"]
+    far = run_now(app, "owner asked", datetime(2026, 10, 4, 21, 0, tzinfo=timezone.utc))
+    assert far["started"] is True and started == ["j1"]
+    assert app.ledger.rows()[-1]["phase"] == "chat.run"
+    app.run_start("run")
+    busy = run_now(app, "again")
+    assert busy["started"] is False and "already in progress" in busy["reason"]
+
+
+def test_next_cron_time():
+    from datetime import datetime, timezone
+    from pr_agent.runnow import next_cron_time
+    now = datetime(2026, 10, 4, 19, 37, tzinfo=timezone.utc)
+    assert next_cron_time("0 */4 * * *", now) == datetime(2026, 10, 4, 20, 0, tzinfo=timezone.utc)
+    assert next_cron_time("30 */2 * * *", now) == datetime(2026, 10, 4, 20, 30, tzinfo=timezone.utc)
+    assert next_cron_time("0 9 * * 1", now) is None

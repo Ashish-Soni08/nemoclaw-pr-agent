@@ -13,7 +13,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from . import policy as policy_mod
+from . import policy as policy_mod, runnow
 from .config import REPO_ROOT, MissingSecret, Settings, secret
 from .devindex import DevIndex
 from .discover import DiscoveryRun
@@ -228,6 +228,9 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser("prestep-follow-up", help="cron pre-step: new review comments and claim replies")
     sub.add_parser("discover", help="run discovery on its own")
 
+    rn = sub.add_parser("run-now", help="start the scheduled run early (owner asked on Telegram); refuses near a scheduled run")
+    rn.add_argument("--why", required=True)
+
     rs = sub.add_parser("run-start")
     rs.add_argument("--label", default="manual")
 
@@ -402,6 +405,9 @@ def dispatch(app: App, a: argparse.Namespace) -> int:  # noqa: C901 - flat comma
         out(app.ledger.log(a.phase, a.subject, a.decision, a.why, a.evidence, a.result))
     elif a.cmd == "workspace":
         return workspace_cmd(app, a)
+    elif a.cmd == "run-now":
+        out(run_now(app, a.why))
+        return 0
     elif a.cmd == "selfcheck":
         res = isolation_selfcheck(app.s.state_dir, app.s.workspaces_dir)
         out(res)
@@ -469,6 +475,26 @@ def dispatch(app: App, a: argparse.Namespace) -> int:  # noqa: C901 - flat comma
                 append_spend(app.s.ledger_dir / "spend.tsv", [billed])
             out({"synced_to": sync_to_dataset(app.s.ledger_dir, repo, token), "hf_billed_usd": billed.cost_usd if billed else None})
     return 0
+
+
+def run_now(app: App, why: str, now: datetime | None = None) -> dict[str, Any]:
+    now = now or datetime.now(timezone.utc)
+    hermes_home = Path(os.environ.get("HERMES_HOME", Path.home() / ".hermes"))
+    job = runnow.find_job(hermes_home / "cron" / "jobs.json", "pr-agent-run")
+    if not job:
+        return {"started": False, "reason": "the pr-agent-run job isn't registered"}
+    busy = runnow.run_in_progress(app.ledger.rows(), now)
+    if busy or runnow.cron_process_running():
+        return {"started": False, "reason": f"a run is already in progress ({busy or 'cron job running'})"}
+    nxt = runnow.next_cron_time(runnow.job_schedule(job), now)
+    if nxt and nxt - now < runnow.NEAR:
+        return {"started": False, "reason": f"the next scheduled run starts at {nxt:%H:%M} UTC, in {int((nxt - now).total_seconds() // 60)} min"}
+    g = app.guard()
+    if g.over:
+        return {"started": False, "reason": f"usage guard: {g.over}"}
+    runnow.start(job["id"], app.s.home / "run-now.log")
+    app.ledger.log("chat.run", "pr-agent-run", "started a run early", why[:200], "telegram", "started")
+    return {"started": True, "next_scheduled": f"{nxt:%H:%M} UTC" if nxt else "unknown", "note": "the summary arrives on Telegram when the run ends"}
 
 
 def workspace_cmd(app: App, a: argparse.Namespace) -> int:
