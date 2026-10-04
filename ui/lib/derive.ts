@@ -68,7 +68,7 @@ export type Rejection = { ts: string; run: string; subject: string; phase: strin
 export type ModelUse = { model: string; runs: number; tokensIn: number; tokensOut: number; costUsd: number };
 
 export type HostMetric = {
-  key: "gpu" | "cpu" | "ram" | "disk";
+  key: "cpu" | "ram" | "disk";
   now: number | null;
   total: number | null;
   agent: number | null;
@@ -360,14 +360,6 @@ function host(rows: HostRow[]): HostView {
     times: window.map((r) => r.ts),
     running: window.map((r) => r.run !== "-"),
     metrics: [
-      {
-        key: "gpu",
-        now: latest.gpu_util_pct,
-        total: 100,
-        agent: latest.agent_vram_gb,
-        extra: latest.vram_used_gb !== null && latest.vram_total_gb !== null ? `VRAM ${fixed1(latest.vram_used_gb)} of ${Math.round(latest.vram_total_gb)} GB` : null,
-        series: pick((r) => r.gpu_util_pct),
-      },
       {
         key: "cpu",
         now: latest.cpu_pct,

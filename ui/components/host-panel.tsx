@@ -3,7 +3,7 @@ import type { HostMetric, HostView } from "@/lib/derive";
 import { ago, clock } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
-const NAME: Record<HostMetric["key"], string> = { gpu: "GPU", cpu: "CPU", ram: "RAM", disk: "Disk" };
+const NAME: Record<HostMetric["key"], string> = { cpu: "CPU", ram: "RAM", disk: "Disk" };
 // More than two sync intervals without a new sample means the sampler or the sync stopped.
 const STALE_MS = 15 * 60 * 1000;
 const r1 = (v: number) => Math.round(v * 10) / 10;
@@ -27,7 +27,7 @@ export function HostPanel({ host, now }: { host: HostView; now: string }) {
           Sampled every minute · as of <b className="font-mono text-foreground">{clock(host.asOf)} UTC</b>, {ago(host.asOf, now)}
         </span>
       </div>
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-1 sm:grid-cols-3">
         {host.metrics.map((m) => (
           <Metric key={m.key} m={m} running={host.running} />
         ))}
@@ -45,20 +45,20 @@ export function HostPanel({ host, now }: { host: HostView; now: string }) {
 }
 
 function Metric({ m, running }: { m: HostMetric; running: boolean[] }) {
-  const pct = m.key === "gpu" || m.key === "cpu";
+  const pct = m.key === "cpu";
   const unit = pct ? "%" : " GB";
   const values = m.series.filter((v): v is number => v !== null);
   const peak = values.length ? Math.max(...values) : null;
   return (
-    <div className="grid min-w-0 content-start gap-1.5 border-dashed py-3 first:pt-0 not-first:border-t sm:py-0 sm:pr-4 sm:not-first:border-t-0 lg:not-first:border-l lg:not-first:pl-4 sm:[&:nth-child(2)]:border-l sm:[&:nth-child(2)]:pl-4">
+    <div className="grid min-w-0 content-start gap-1.5 border-dashed py-3 first:pt-0 not-first:border-t sm:py-0 sm:pr-4 sm:not-first:border-t-0 sm:not-first:border-l sm:not-first:pl-4">
       <Label>{NAME[m.key]}</Label>
       <div className="font-mono text-[22px] leading-tight font-semibold">
         {m.now === null ? "–" : pct ? `${Math.round(m.now * 10) / 10}%` : Math.round(m.now * 10) / 10}{" "}
-        <small className="text-xs font-normal text-muted-foreground">{pct ? (m.key === "cpu" ? "of all cores" : "utilization") : m.total !== null ? `of ${Math.round(m.total).toLocaleString("en")} GB` : "GB"}</small>
+        <small className="text-xs font-normal text-muted-foreground">{pct ? "of all cores" : m.total !== null ? `of ${Math.round(m.total).toLocaleString("en")} GB` : "GB"}</small>
       </div>
       <span className="text-xs text-muted-foreground">
         {m.key === "disk" ? "Agent workspaces" : "Agent"}{" "}
-        <b className="font-mono font-medium text-foreground">{m.agent === null ? "–" : m.key === "cpu" ? `${r1(m.agent)} cores` : `${r1(m.agent)} GB${m.key === "gpu" ? " VRAM" : ""}`}</b>
+        <b className="font-mono font-medium text-foreground">{m.agent === null ? "–" : m.key === "cpu" ? `${r1(m.agent)} cores` : `${r1(m.agent)} GB`}</b>
         {m.extra ? ` · ${m.extra}` : null}
       </span>
       <Spark series={m.series} running={running} label={`${NAME[m.key]}, last 6 hours${peak === null ? "" : `, peak ${Math.round(peak * 10) / 10}${unit}`}`} />
