@@ -213,3 +213,13 @@ def test_run_now_can_start_the_follow_up_and_respects_a_hold(home, tmp_path, mon
     app.set_hold(True, "testing")
     held = run_now(app, "again", at)
     assert held["started"] is False and "on hold" in held["reason"]
+
+
+def test_hold_and_lock_rows_dont_keep_a_crashed_run_alive():
+    from datetime import datetime, timezone
+    from pr_agent.runnow import run_in_progress
+    rows = [{"ts": "2026-10-04T20:00:00Z", "run": "r1", "phase": "start", "decision": "started run run"},
+            {"ts": "2026-10-04T20:05:00Z", "run": "r1", "phase": "triage", "decision": "take"},
+            {"ts": "2026-10-04T21:10:00Z", "run": "r1", "phase": "hold", "decision": "put on hold"},
+            {"ts": "2026-10-04T21:12:00Z", "run": "r1", "phase": "lock", "decision": "skipped follow-up"}]
+    assert run_in_progress(rows, datetime(2026, 10, 4, 21, 20, tzinfo=timezone.utc)) == ""

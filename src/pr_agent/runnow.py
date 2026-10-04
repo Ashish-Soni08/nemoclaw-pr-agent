@@ -18,6 +18,8 @@ NEAR = timedelta(minutes=30)
 RUN_MAX = timedelta(hours=2)
 # Longer than a fix sub-agent may work without writing a ledger row (its timeout is 60 min).
 RUN_QUIET = timedelta(minutes=70)
+# Rows logged outside a run (Telegram, the owner's hold, skipped pre-steps) under the last run's id.
+NOT_ACTIVITY = ("chat.", "hold", "lock")
 
 
 def _field(spec: str, lo: int, hi: int) -> set[int]:
@@ -70,8 +72,8 @@ def run_in_progress(rows: list[dict[str, str]], now: datetime) -> str:
     """Id of a run that started recently and hasn't logged run.end, or ""."""
     started, ended, last = {}, set(), {}
     for r in rows:
-        # Chat rows carry the last run's id but aren't that run's activity.
-        if not r.get("phase", "").startswith("chat."):
+        # Chat, hold and lock rows carry the last run's id but aren't that run's activity.
+        if not r.get("phase", "").startswith(NOT_ACTIVITY):
             last[r.get("run", "")] = r.get("ts", "")
         if r.get("phase") == "start" and r.get("decision", "").startswith("started") and "skipped" not in r.get("decision", ""):
             started[r.get("run", "")] = r.get("ts", "")
