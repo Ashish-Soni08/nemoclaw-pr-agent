@@ -281,7 +281,8 @@ def build_parser() -> argparse.ArgumentParser:
     csub.add_parser("updates")
     cs = csub.add_parser("set")
     cs.add_argument("issue_id")
-    cs.add_argument("status", choices=["approved", "declined", "expired", "waiting"])
+    # build: no answer yet, but the build-directly default says open the PR anyway (never "approved").
+    cs.add_argument("status", choices=["approved", "build", "declined", "expired", "waiting"])
     cs.add_argument("--why", required=True)
 
     sm = sub.add_parser("summary", help="Telegram text")
@@ -555,6 +556,8 @@ def claim_cmd(app: App, a: argparse.Namespace) -> int:
     else:
         if a.issue_id not in app.registry.claims():
             raise SystemExit(f"no claim recorded for {a.issue_id}")
+        if a.status == "build" and app.registry.claims()[a.issue_id].get("status") != "waiting":
+            raise SystemExit("only a waiting claim can move to build")
         app.registry.save_claim(a.issue_id, {"status": a.status})
         app.ledger.log("claim.status", a.issue_id, f"claim {a.status}", a.why, app.registry.claims()[a.issue_id]["comment_url"], a.status)
         out({"status": a.status})

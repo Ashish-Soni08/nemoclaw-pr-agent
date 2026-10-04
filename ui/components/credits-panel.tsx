@@ -5,7 +5,7 @@ import { cn } from "@/lib/utils";
 
 const WHAT: Record<string, string> = {
   huggingface: "model calls through Inference Providers",
-  lambda: "GPU host, billed per hour of uptime",
+  lambda: "GPU host, billed every hour from launch",
   firecrawl: "Developer Index searches",
 };
 
@@ -62,11 +62,17 @@ function CreditCard({ c }: { c: Credit }) {
           );
         })}
       </svg>
+      {c.billingChangedOn && c.daily.some((d) => d.day === c.billingChangedOn) ? (
+        <span className="text-xs text-muted-foreground">
+          The {dayLabel(c.billingChangedOn)} bar includes a one-time catch-up: cost now counts every hour since launch, as Lambda bills, not only uptime.
+        </span>
+      ) : null}
       <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1 text-xs">
         <Fact k="Spend per day" v={`${dayLabel(c.daily[0].day)} → ${dayLabel(c.daily.at(-1)!.day)}`} />
         <Fact k="Today" v={amount(c.daily.at(-1)!.amount, c.unit)} />
         <Fact k="Last 7 days" v={amount(week, c.unit)} />
-        {c.hours !== null ? <Fact k="Uptime" v={`${c.hours.toFixed(1)} h`} /> : null}
+        {c.runningSince ? <Fact k="Running since" v={`${dayLabel(c.runningSince.slice(0, 10))} ${c.runningSince.slice(11)} UTC`} /> : null}
+        {c.hours !== null ? <Fact k="Billed hours" v={`${c.hours.toFixed(1)} h`} /> : null}
         <Fact k="Runs out" v={c.runsOut} />
         <Fact k="As of" v={`${dayLabel(c.asOf.slice(0, 10))} ${clock(c.asOf)} UTC`} />
       </dl>

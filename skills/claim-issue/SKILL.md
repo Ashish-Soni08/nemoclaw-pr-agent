@@ -22,5 +22,10 @@ metadata:
 - A maintainer declines, asks to wait, or someone else takes it → `pr-agent claim set <issue_id> declined --why "<quote>"`. Don't reply unless they asked you something. If the no is about AI contributions in general (not just this issue), also run `pr-agent policy <owner/repo> --block --why "<quote>" --evidence <comment url>`.
 - A question from a maintainer → leave the claim `waiting` and flag it in the run summary so the human sees it. The agent doesn't post free-form issue comments.
 - Expired (7 days, no reply) → `pr-agent claim set <issue_id> expired --why "no reply in 7 days"`.
+- State `build` → we were told to build it without waiting (see below). If a maintainer replied, handle their reply as above first; a no still wins. Otherwise start a fix sub-agent with **fix-issue**. In the PR body's Why section, link your plan comment (`comment_url` in the claim) and say you opened the PR so they can judge the actual change.
+
+## Building a claim without an answer
+
+Under the build-directly default (Ashish, 2026-10-04), a waiting claim in a repo that doesn't require a yes (`claim_required` false) may be moved to build: `pr-agent claim set <issue_id> build --why "<reason>"`. Never record that as `approved`: nobody said yes. `pr-agent pr open` refuses a `build` claim when the repo requires a yes.
 
 Replies from non-maintainers don't count as approval.

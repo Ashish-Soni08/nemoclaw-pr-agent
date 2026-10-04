@@ -78,3 +78,15 @@ def test_sync_creates_private_dataset_and_uploads_ledger(tmp_path, monkeypatch):
     assert calls[1] == ("create", "me/pr-agent-ledger", {"repo_type": "dataset", "private": True, "exist_ok": True})
     upload = calls[2][1]
     assert upload["repo_type"] == "dataset" and upload["path_in_repo"] == "ledger"
+
+
+def test_settings_fill_missing_provider_placeholders_from_file(tmp_path, monkeypatch):
+    from pr_agent.config import Settings
+    (tmp_path / "provider-env").write_text("PRAGENT_GITHUB_TOKEN=from-file\nPRAGENT_FIRECRAWL_KEY=from-file\n")
+    monkeypatch.setenv("PR_AGENT_HOME", str(tmp_path))
+    monkeypatch.delenv("PRAGENT_GITHUB_TOKEN", raising=False)
+    monkeypatch.setenv("PRAGENT_FIRECRAWL_KEY", "from-exec")
+    Settings.load()
+    import os
+    assert os.environ["PRAGENT_GITHUB_TOKEN"] == "from-file"
+    assert os.environ["PRAGENT_FIRECRAWL_KEY"] == "from-exec"
