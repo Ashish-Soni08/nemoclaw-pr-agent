@@ -84,8 +84,11 @@ class App:
         key = os.environ.get("PRAGENT_FIRECRAWL_KEY") or os.environ.get("FIRECRAWL_API_KEY", "")
         return spend_snapshot(self.s.state_dir, self.s.ledger_dir, self.s.agent, hf_month_usd, key)
 
-    def ledger_url(self) -> str:
+    def ledger_url(self, for_summary: bool = False) -> str:
         led = self.s.agent.get("ledger", {})
+        # The dataset is private, so the summary links the public dashboard instead.
+        if for_summary and led.get("dashboard_url"):
+            return led["dashboard_url"]
         if led.get("public_url"):
             return led["public_url"]
         repo = os.environ.get("LEDGER_DATASET") or led.get("hf_dataset", "")
@@ -416,7 +419,7 @@ def dispatch(app: App, a: argparse.Namespace) -> int:  # noqa: C901 - flat comma
                 fc = budgets["firecrawl"]
                 usage += f" · {fc.used:,.0f} / {fc.limit / 1000:,.0f}k Firecrawl"
             app.run_tokens(run)
-            out(run_summary(app.ledger.run_rows(run), app.registry, run, usage, app.ledger_url()))
+            out(run_summary(app.ledger.run_rows(run), app.registry, run, usage, app.ledger_url(for_summary=True)))
             app.ledger.log("run.end", run, "sent run summary", "end of run", "telegram", "done")
         else:
             g = app.guard()

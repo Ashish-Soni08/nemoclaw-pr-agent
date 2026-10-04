@@ -23,6 +23,7 @@ def test_log_show_and_summary(home, capsys):
     text = capsys.readouterr().out
     assert "**PR agent run**" in text and "• [o/r#1](https://github.com/o/r/issues/1): clear repro" in text
     assert "💸 **Spend** $0.00 / $" in text
+    assert "📒 [Full ledger](https://nemoclaw-pr-agent-ledger.vercel.app)" in text
     spend = (home / "ledger" / "spend.tsv").read_text().splitlines()
     assert spend[0].split("\t") == ["ts", "provider", "used", "unit", "cost_usd", "remaining", "limit", "source"]
     assert [l.split("\t")[1] for l in spend[1:]] == ["huggingface", "firecrawl", "lambda"]
