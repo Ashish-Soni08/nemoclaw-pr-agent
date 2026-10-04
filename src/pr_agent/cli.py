@@ -724,6 +724,8 @@ def claim_cmd(app: App, a: argparse.Namespace) -> int:
             raise SystemExit(f"no claim recorded for {a.issue_id}")
         if a.status == "build" and app.registry.claims()[a.issue_id].get("status") != "waiting":
             raise SystemExit("only a waiting claim can move to build")
+        if a.status == "approved" and app.registry.prs_for_issue(a.issue_id):
+            raise SystemExit("a PR is already open for this issue, so leave the claim as it is: approved means a maintainer said yes")
         app.registry.save_claim(a.issue_id, {"status": a.status})
         app.ledger.log("claim.status", a.issue_id, f"claim {a.status}", a.why, app.registry.claims()[a.issue_id]["comment_url"], a.status)
         out({"status": a.status})

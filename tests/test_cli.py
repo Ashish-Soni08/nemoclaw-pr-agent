@@ -247,3 +247,15 @@ def test_run_start_refuses_inside_a_live_run(home):
     assert res == {"started": False, "run": live, "reason": res["reason"]}
     assert "already going" in res["reason"]
     assert [r["run"] for r in app.ledger.rows() if r.get("phase") == "start"] == [live]
+
+
+def test_claim_cannot_be_marked_approved_once_its_pr_is_open(home, monkeypatch):
+    import pytest
+    from pr_agent.cli import App, main
+    monkeypatch.setenv("PRAGENT_GITHUB_TOKEN", "placeholder")
+    reg = App().registry
+    reg.save_claim("issue:acme/lib#7", {"status": "build", "comment_url": "https://github.com/acme/lib/issues/7#c"})
+    reg.save_pr("acme/lib#9", {"issue_id": "issue:acme/lib#7", "repo": "acme/lib", "state": "open"})
+    with pytest.raises(SystemExit, match="maintainer said yes"):
+        main(["claim", "set", "acme/lib#7", "approved", "--why", "PR opened"])
+    assert reg.claims()["issue:acme/lib#7"]["status"] == "build"
