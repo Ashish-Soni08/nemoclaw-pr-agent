@@ -32,9 +32,16 @@ def test_cgroup_usage_sums_cpu_and_memory(tmp_path):
     for name, usec, mem in (("a", 2_000_000, 1024), ("b", 1_000_000, 2048)):
         (root / name).mkdir(parents=True)
         (root / name / "cpu.stat").write_text(f"usage_usec {usec}\nuser_usec 1\n")
-        (root / name / "memory.current").write_text(str(mem))
-    assert hs.cgroup_usage({"/a", "/b"}, root) == (3_000_000, 3072)
-    assert hs.cgroup_usage({"/missing"}, root) == (None, None)
+        (root / name / "memory.current").write_text(str(mem * 100))  # mostly page cache
+        (root / name / "memory.stat").write_text(f"anon {mem}\nfile {mem * 99}\n")
+    assert hs.cgroup_usage({"/a", "/b"}, root) == ({"/a": 2_000_000, "/b": 1_000_000}, 3072)
+    assert hs.cgroup_usage({"/missing"}, root) == ({}, None)
+
+
+def test_cpu_counts_only_cgroups_seen_in_both_samples():
+    prev = {"/a": 1_000_000}
+    cur = {"/a": 31_000_000, "/new": 900_000_000}
+    assert hs.cpu_cores(prev, cur, 60) == 0.5
 
 
 def test_current_run_ignores_finished_and_stale_runs(tmp_path):
@@ -43,6 +50,7 @@ def test_current_run_ignores_finished_and_stale_runs(tmp_path):
         ("2026-10-04T16:00:00Z", "old", "start"),  # never ended, but too long ago
         ("2026-10-04T18:30:00Z", "done", "start"), ("2026-10-04T18:40:00Z", "done", "run.end"),
         ("2026-10-04T19:30:00Z", "live", "start"),
+        ("2026-10-04T18:00:00Z", "crashed", "start"),  # quiet for 45+ minutes
     ]
     led.write_text("ts\trun\tphase\tsubject\n" + "".join(f"{t}\t{r}\t{p}\tx\n" for t, r, p in rows))
     assert hs.current_run(led, NOW) == "live"

@@ -16,6 +16,7 @@ from typing import Any
 NEAR = timedelta(minutes=30)
 # A run with no end row (a crashed session) stops counting as in progress after this long.
 RUN_MAX = timedelta(hours=2)
+RUN_QUIET = timedelta(minutes=45)
 
 
 def _field(spec: str, lo: int, hi: int) -> set[int]:
@@ -66,8 +67,9 @@ def job_schedule(job: dict[str, Any]) -> str:
 
 def run_in_progress(rows: list[dict[str, str]], now: datetime) -> str:
     """Id of a run that started recently and hasn't logged run.end, or ""."""
-    started, ended = {}, set()
+    started, ended, last = {}, set(), {}
     for r in rows:
+        last[r.get("run", "")] = r.get("ts", "")
         if r.get("phase") == "start" and r.get("decision", "").startswith("started") and "skipped" not in r.get("decision", ""):
             started[r.get("run", "")] = r.get("ts", "")
         elif r.get("phase") == "run.end":
@@ -76,10 +78,13 @@ def run_in_progress(rows: list[dict[str, str]], now: datetime) -> str:
         if run in ended:
             continue
         try:
-            if now - datetime.fromisoformat(ts.replace("Z", "+00:00")) <= RUN_MAX:
-                return run
+            age = now - datetime.fromisoformat(ts.replace("Z", "+00:00"))
+            quiet = now - datetime.fromisoformat(last[run].replace("Z", "+00:00"))
         except ValueError:
             continue
+        # A crashed run never logs run.end; a long silence means it's over.
+        if age <= RUN_MAX and quiet <= RUN_QUIET:
+            return run
     return ""
 
 

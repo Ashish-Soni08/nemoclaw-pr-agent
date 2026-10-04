@@ -26,6 +26,7 @@ AGENT_PROCS = os.environ.get("PR_AGENT_PROC_PATTERN", r"openshell|nemoclaw|herme
 CGROUP_ROOT = Path("/sys/fs/cgroup")
 # A run with no end row (a crashed session) stops counting as in progress after this long.
 RUN_MAX = timedelta(hours=2)
+RUN_QUIET = timedelta(minutes=45)
 DISK_EVERY = timedelta(minutes=15)
 
 
@@ -114,18 +115,36 @@ def agent_cgroups(proc: Path = Path("/proc"), pattern: str = AGENT_PROCS) -> set
     return {c for c in found if not any(c != o and c.startswith(o.rstrip("/") + "/") for o in found)}
 
 
-def cgroup_usage(cgroups: set[str], root: Path = CGROUP_ROOT) -> tuple[int | None, int | None]:
-    """(cpu usage µs, memory bytes) summed over the cgroups."""
-    usec, mem, seen = 0, 0, False
+def _stat(path: Path, key: str) -> int:
+    return int(next(line.split()[1] for line in path.read_text().splitlines() if line.startswith(key + " ")))
+
+
+def cgroup_usage(cgroups: set[str], root: Path = CGROUP_ROOT) -> tuple[dict[str, int], int | None]:
+    """(cpu usage µs per cgroup, memory bytes summed).
+
+    Memory is anonymous memory only: memory.current also counts page cache, which for a container
+    that clones repos is many GB the kernel hands back on demand, and isn't comparable to host used RAM.
+    """
+    usec: dict[str, int] = {}
+    mem, seen = 0, False
     for cg in cgroups:
         d = root / cg.lstrip("/")
         try:
-            usec += int(next(line.split()[1] for line in (d / "cpu.stat").read_text().splitlines() if line.startswith("usage_usec")))
-            mem += int((d / "memory.current").read_text())
+            usec[cg] = _stat(d / "cpu.stat", "usage_usec")
+            mem += _stat(d / "memory.stat", "anon")
             seen = True
         except (OSError, StopIteration, ValueError):
             continue
-    return (usec, mem) if seen else (None, None)
+    return usec, (mem if seen else None)
+
+
+def cpu_cores(prev: dict[str, int], cur: dict[str, int], elapsed: float) -> float | None:
+    """Cores used between two samples, over cgroups present in both (a cgroup that appears
+    between samples would otherwise count its whole lifetime's CPU at once)."""
+    common = [cg for cg in cur if cg in prev and cur[cg] >= prev[cg]]
+    if not common or elapsed <= 0:
+        return None
+    return sum(cur[cg] - prev[cg] for cg in common) / 1e6 / elapsed
 
 
 def cgroup_pids(cgroups: set[str], root: Path = CGROUP_ROOT) -> set[int]:
@@ -143,20 +162,25 @@ def current_run(decisions: Path, now: datetime) -> str:
     """The run in progress per the ledger mirror, or "-"."""
     if not decisions.exists():
         return "-"
-    started, ended = {}, set()
+    started, ended, last = {}, set(), {}
     with decisions.open(encoding="utf-8") as fh:
         for r in csv.DictReader(fh, delimiter="\t", quoting=csv.QUOTE_NONE):
+            run = r.get("run", "")
+            last[run] = r.get("ts", "")
             if r.get("phase") == "start":
-                started[r.get("run", "")] = r.get("ts", "")
+                started[run] = r.get("ts", "")
             elif r.get("phase") == "run.end":
-                ended.add(r.get("run", ""))
+                ended.add(run)
     live = [(ts, run) for run, ts in started.items() if run and run not in ended]
     for ts, run in sorted(live, reverse=True):
         try:
-            if now - datetime.fromisoformat(ts.replace("Z", "+00:00")) <= RUN_MAX:
-                return run
+            age = now - datetime.fromisoformat(ts.replace("Z", "+00:00"))
+            quiet = now - datetime.fromisoformat(last[run].replace("Z", "+00:00"))
         except ValueError:
             continue
+        # A run that crashed never logs run.end; treat a long silence as over.
+        if age <= RUN_MAX and quiet <= RUN_QUIET:
+            return run
     return "-"
 
 
@@ -196,7 +220,7 @@ def sample(state: dict, mirror: Path, now: datetime | None = None, proc: Path = 
     dt_total = total - prev["total"]
     cpu_pct = 100 * (busy - prev["busy"]) / dt_total if dt_total > 0 else None
     elapsed = mono - prev["mono"]
-    cores = (usec - prev["usec"]) / 1e6 / elapsed if usec is not None and prev.get("usec") is not None and elapsed > 0 and usec >= prev["usec"] else None
+    cores = cpu_cores(prev.get("usec") if isinstance(prev.get("usec"), dict) else {}, usec, elapsed)
     state["prev"] = {"busy": busy, "total": total, "usec": usec, "mono": mono}
 
     ram_used, ram_total = memory_gb(proc)
