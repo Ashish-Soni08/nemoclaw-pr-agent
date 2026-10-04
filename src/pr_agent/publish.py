@@ -334,6 +334,21 @@ def claim_updates(gh: GitHub, registry: Registry, expire_days: int = 7) -> list[
     return out
 
 
+COMMENT_CAP = 4000
+# Collapsed blocks review bots fill with their own tool runs, not with the finding.
+TOOL_LOG = re.compile(r"<details>\s*<summary>[^<]*(analysis chain|script executed|scripts executed|length of output)[^<]*</summary>.*?</details>", re.I | re.S)
+
+
+def comment_text(body: str) -> str:
+    """A comment's text for the agent: no HTML comments or bot tool logs, then capped.
+
+    Cutting at 800 characters on 2026-10-04 left only CodeRabbit's script logs, so the agent
+    dismissed a real finding as "no claim"."""
+    text = TOOL_LOG.sub("[tool log removed]", re.sub(r"<!--.*?-->", "", body or "", flags=re.S))
+    text = re.sub(r"\n{3,}", "\n\n", text).strip()
+    return text if len(text) <= COMMENT_CAP else text[:COMMENT_CAP] + " [cut; read the full comment at its url]"
+
+
 def pr_updates(gh: GitHub, registry: Registry, ledger: Ledger | None = None) -> list[dict[str, Any]]:
     """New review comments, conversation comments and state changes on our open PRs.
 
@@ -348,12 +363,17 @@ def pr_updates(gh: GitHub, registry: Registry, ledger: Ledger | None = None) -> 
         state = "merged" if pr.get("merged_at") else pr["state"]
         seen = set(rec.get("seen_comment_ids", []))
         new = []
+        # A review's summary often carries what its inline comments only point at (CodeRabbit puts
+        # the actual request there), so the agent gets both, with each inline comment's summary id.
+        for r in gh.pr_reviews(rec["repo"], rec["number"]):
+            if r["id"] not in seen and r["user"]["login"] != me and (r.get("body") or "").strip():
+                new.append({"kind": "review_summary", "id": r["id"], "author": r["user"]["login"], "association": r.get("author_association"), "state": r.get("state"), "body": comment_text(r["body"]), "url": r.get("html_url", rec["url"])})
         for c in gh.pr_review_comments(rec["repo"], rec["number"]):
             if c["id"] not in seen and c["user"]["login"] != me:
-                new.append({"kind": "review", "id": c["id"], "author": c["user"]["login"], "association": c.get("author_association"), "path": c.get("path"), "line": c.get("line"), "body": c["body"][:800], "url": c["html_url"]})
+                new.append({"kind": "review", "id": c["id"], "review_id": c.get("pull_request_review_id"), "author": c["user"]["login"], "association": c.get("author_association"), "path": c.get("path"), "line": c.get("line"), "body": comment_text(c["body"]), "url": c["html_url"]})
         for c in gh.comments(rec["repo"], rec["number"]):
             if c["id"] not in seen and c["user"]["login"] != me:
-                new.append({"kind": "conversation", "id": c["id"], "author": c["user"]["login"], "association": c.get("author_association"), "body": c["body"][:800], "url": c["html_url"]})
+                new.append({"kind": "conversation", "id": c["id"], "author": c["user"]["login"], "association": c.get("author_association"), "body": comment_text(c["body"]), "url": c["html_url"]})
         # Comments stay "new" until the agent answers or acks them, so a crashed run loses nothing.
         registry.save_pr(key, {"state": state, "checked_at": utcnow().isoformat(timespec="seconds")})
         if state != "open" and ledger is not None:

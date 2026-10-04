@@ -90,6 +90,10 @@ class GitHub:
     def pr_review_comments(self, full: str, number: int) -> list[dict[str, Any]]:
         return self.client.get_json(f"/repos/{full}/pulls/{number}/comments?per_page=100")
 
+    def pr_reviews(self, full: str, number: int) -> list[dict[str, Any]]:
+        resp = self.client.request("GET", f"/repos/{full}/pulls/{number}/reviews?per_page=100")
+        return resp.json() if resp.ok and isinstance(resp.json(), list) else []
+
     def pr(self, full: str, number: int) -> dict[str, Any]:
         return self.client.get_json(f"/repos/{full}/pulls/{number}")
 
