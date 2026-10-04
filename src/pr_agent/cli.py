@@ -292,6 +292,10 @@ def build_parser() -> argparse.ArgumentParser:
     rs = sub.add_parser("run-start")
     rs.add_argument("--label", default="manual")
 
+    re_ = sub.add_parser("run-end", help="close a run a human stopped (it never logged run.end), so run-now and the lock don't wait for it")
+    re_.add_argument("run")
+    re_.add_argument("--why", required=True)
+
     pol = sub.add_parser("policy", help="AI-contribution policy verdict for a repo")
     pol.add_argument("repo")
     pol.add_argument("--block", action="store_true", help="a maintainer said no to AI contributions: skip this repo for good")
@@ -467,6 +471,9 @@ def dispatch(app: App, a: argparse.Namespace) -> int:  # noqa: C901 - flat comma
         out(app.ledger.log(a.phase, a.subject, a.decision, a.why, a.evidence, a.result))
     elif a.cmd == "workspace":
         return workspace_cmd(app, a)
+    elif a.cmd == "run-end":
+        out(end_run(app, a.run, a.why))
+        return 0
     elif a.cmd == "run-now":
         out(run_now(app, a.why, follow_up=a.follow_up))
         return 0
@@ -545,6 +552,20 @@ def dispatch(app: App, a: argparse.Namespace) -> int:  # noqa: C901 - flat comma
                 append_spend(app.s.ledger_dir / "spend.tsv", [billed])
             out({"synced_to": sync_to_dataset(app.s.ledger_dir, repo, token), "hf_billed_usd": billed.cost_usd if billed else None})
     return 0
+
+
+def end_run(app: App, run: str, why: str) -> dict[str, Any]:
+    """Log run.end for a run that was killed: only a started run that hasn't ended, and only one
+    that is quiet now (a run still writing rows is alive and must not be closed from outside)."""
+    rows = app.ledger.rows()
+    if not any(r.get("run") == run and r.get("phase") == "start" for r in rows):
+        return {"ended": False, "reason": f"no run {run} in the ledger"}
+    if any(r.get("run") == run and r.get("phase") == "run.end" for r in rows):
+        return {"ended": False, "reason": f"run {run} already ended"}
+    if runnow.cron_process_running():
+        return {"ended": False, "reason": "a hermes cron run is still going; stop it first"}
+    Ledger(app.ledger.path, run).log("run.end", run, "stopped by a human", why[:200], "operator", "stopped")
+    return {"ended": True, "run": run}
 
 
 def run_now(app: App, why: str, now: datetime | None = None, follow_up: bool = False) -> dict[str, Any]:
