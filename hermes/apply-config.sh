@@ -11,7 +11,7 @@ hermes config set delegation.max_concurrent_children 2
 hermes config set delegation.child_timeout_seconds 3600
 # Cron runs delegate_task synchronously (nothing can come back after the turn ends), and Hermes
 # cuts any tool call off at 420 s by default. Let it outlast the children it waits for.
-hermes config set tools.concurrent_batch 3900
+hermes config set timeouts.tools.concurrent_batch 3900
 # A full run (triage, two fixes, gate, PR text) needs more than the managed default of 60 turns.
 hermes config set agent.max_turns 200
 # Let the terminal tool see the agent's own settings and credential placeholders.

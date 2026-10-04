@@ -113,6 +113,8 @@ class App:
             sha = subprocess.run(["git", "-C", str(REPO_ROOT), "rev-parse", "--short", "HEAD"], capture_output=True, text=True, timeout=10).stdout.strip()
         except (OSError, subprocess.SubprocessError):
             sha = ""
+        if not sha and (REPO_ROOT / ".deployed-commit").exists():
+            sha = (REPO_ROOT / ".deployed-commit").read_text().strip()
         if not sha and cfg_path.exists():
             sha = "sha256:" + hashlib.sha256(cfg_path.read_bytes()).hexdigest()[:7]
         entries = menu(self.s.agent)
@@ -160,13 +162,18 @@ class App:
 
     def code_drift(self, run: str) -> str:
         """The agent must never edit its own code; a changed checkout is logged for a human."""
-        try:
-            changed = subprocess.run(["git", "-C", str(REPO_ROOT), "status", "--porcelain", "--untracked-files=no"], capture_output=True, text=True, timeout=10).stdout.rstrip()
-        except (OSError, subprocess.SubprocessError):
+        manifest = REPO_ROOT / ".deployed-manifest"
+        if not manifest.exists():
             return ""
+        changed = []
+        for line in manifest.read_text().splitlines():
+            digest, _, rel = line.partition("  ")
+            path = REPO_ROOT / rel
+            if not path.is_file() or hashlib.sha256(path.read_bytes()).hexdigest() != digest:
+                changed.append(rel)
         if not changed:
             return ""
-        files = ", ".join(line[3:] for line in changed.splitlines()[:5])
+        files = ", ".join(changed[:5])
         self.ledger.log("tool.error", run, "pr-agent's own code was changed since deploy", "only humans change the agent's tools; redeploy to restore", files, "drift")
         return f"pr-agent's own code was changed since deploy ({files}). Don't edit it; mention this in the summary."
 
