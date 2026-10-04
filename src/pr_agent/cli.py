@@ -282,7 +282,7 @@ def build_parser() -> argparse.ArgumentParser:
     cs = csub.add_parser("set")
     cs.add_argument("issue_id")
     # build: no answer yet, but the build-directly default says open the PR anyway (never "approved").
-    cs.add_argument("status", choices=["approved", "build", "declined", "expired", "waiting"])
+    cs.add_argument("status", choices=["approved", "build", "declined", "dropped", "expired", "waiting"])
     cs.add_argument("--why", required=True)
 
     sm = sub.add_parser("summary", help="Telegram text")
