@@ -439,7 +439,9 @@ def dispatch(app: App, a: argparse.Namespace) -> int:  # noqa: C901 - flat comma
     elif a.cmd == "prestep-follow-up":
         print(json.dumps(app.prestep_follow_up(), default=str))
     elif a.cmd == "run-start":
-        out(app.run_start(a.label))
+        res = manual_start(app, a.label)
+        out(res["run"] if res["started"] else res)
+        return 0 if res["started"] else 1
     elif a.cmd == "discover":
         out(app.discover())
     elif a.cmd == "policy" and a.block:
@@ -552,6 +554,14 @@ def dispatch(app: App, a: argparse.Namespace) -> int:  # noqa: C901 - flat comma
                 append_spend(app.s.ledger_dir / "spend.tsv", [billed])
             out({"synced_to": sync_to_dataset(app.s.ledger_dir, repo, token), "hf_billed_usd": billed.cost_usd if billed else None})
     return 0
+
+
+def manual_start(app: App, label: str) -> dict[str, Any]:
+    """Start a run by hand, unless one is already going: a cron run hands its id to the agent in the
+    context, and a second id would split that run's rows in two."""
+    if live := runnow.run_in_progress(app.ledger.rows(), datetime.now(timezone.utc)):
+        return {"started": False, "run": live, "reason": f"run {live} is already going; keep using that id (it is in your context), never start another"}
+    return {"started": True, "run": app.run_start(label)}
 
 
 def end_run(app: App, run: str, why: str) -> dict[str, Any]:

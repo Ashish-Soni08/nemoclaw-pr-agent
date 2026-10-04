@@ -237,3 +237,13 @@ def test_a_stopped_run_can_be_closed_so_the_lock_frees(home, monkeypatch):
     assert end_run(app, killed, "gateway restarted by operator")["ended"] is True
     assert runnow.run_in_progress(app.ledger.rows(), datetime.now(timezone.utc)) == ""
     assert end_run(app, killed, "again")["reason"].endswith("already ended")
+
+
+def test_run_start_refuses_inside_a_live_run(home):
+    from pr_agent.cli import App, manual_start
+    app = App()
+    live = app.run_start("run")
+    res = manual_start(app, "manual")
+    assert res == {"started": False, "run": live, "reason": res["reason"]}
+    assert "already going" in res["reason"]
+    assert [r["run"] for r in app.ledger.rows() if r.get("phase") == "start"] == [live]
