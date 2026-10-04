@@ -70,6 +70,9 @@ class Registry:
         day = utcnow().date().isoformat()
         return sum(1 for c in self.claims().values() if c.get("claimed_at", "").startswith(day))
 
+    def prs_for_issue(self, issue_id: str) -> list[str]:
+        return [k for k, p in self.prs().items() if p.get("issue_id") == issue_id]
+
     def open_in_repo(self, repo: str) -> list[str]:
         # GitHub repo names are case-insensitive: Org/Repo and org/repo are the same repo.
         return [k for k, p in self.prs().items() if str(p.get("repo", "")).lower() == repo.lower() and p.get("state") == "open"]
@@ -156,7 +159,11 @@ def preflight(meta: Meta, policy: PolicyVerdict, registry: Registry, limits: dic
     tree = gated_tree(meta)
     gate = read_json(Path(meta.path) / ".pr-agent" / "gate.json", {})
     claim = registry.claims().get(meta.issue_id)
-    if claim and claim.get("status") != "approved":
+    # "build": we posted a plan, nobody answered, and the build-directly default (Ashish, 2026-10-04)
+    # lets us open the PR anyway, unless the repo itself asks contributors to wait for a yes.
+    if claim and claim.get("status") == "build" and policy.claim_required:
+        raise Refused("repo asks contributors to wait for a maintainer's yes; this claim can't be built without one")
+    if claim and claim.get("status") not in ("approved", "build"):
         raise Refused(f"claim on this issue is {claim.get('status')}; a maintainer has not said yes")
     if not policy.permits(allow_unclear):
         raise Refused(f"repo AI policy is {policy.verdict}")
@@ -238,7 +245,7 @@ def claim_updates(gh: GitHub, registry: Registry, expire_days: int = 7) -> list[
     out = []
     me = gh.login()
     for issue_id, claim in registry.claims().items():
-        if claim.get("status") != "waiting":
+        if claim.get("status") not in ("waiting", "build") or claim.get("status") == "build" and registry.prs_for_issue(issue_id):
             continue
         issue = gh.issue(claim["repo"], claim["number"])
         assignees = {a["login"] for a in issue.get("assignees") or []}
@@ -249,6 +256,9 @@ def claim_updates(gh: GitHub, registry: Registry, expire_days: int = 7) -> list[
         ]
         age = (utcnow() - datetime.fromisoformat(claim["claimed_at"])).days
         state = "assigned-to-us" if me in assignees else ("closed" if issue["state"] != "open" else ("expired" if age >= expire_days and not replies else "waiting"))
+        if claim.get("status") == "build" and state in ("waiting", "expired"):
+            # Someone else assigned or a maintainer replied: the model judges those as for any claim.
+            state = "taken" if assignees - {me} else "build"
         out.append({"issue_id": issue_id, "state": state, "assignees": sorted(assignees), "replies": replies, "age_days": age})
     return out
 

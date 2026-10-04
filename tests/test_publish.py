@@ -235,3 +235,27 @@ def test_one_open_pr_per_repo_ignores_case(tmp_path):
     reg = Registry(tmp_path)
     reg.save_pr("Org/Repo#1", {"repo": "Org/Repo", "number": 1, "state": "open"})
     assert reg.open_in_repo("org/repo") == ["Org/Repo#1"]
+
+
+def test_build_claim_opens_unless_the_repo_requires_a_yes(ws, tmp_path):
+    from dataclasses import replace
+    fix(ws)
+    record_gate(ws, "pass", "no findings", ["thermo", "security"])
+    reg = Registry(tmp_path)
+    reg.save_claim("issue:o/r#7", {"repo": "o/r", "number": 7, "status": "build"})
+    with pytest.raises(Refused, match="wait for a maintainer"):
+        preflight(ws, replace(ALLOW, claim_required=True), reg, LIMITS, "fix(pkg): add numbers", BODY)
+    preflight(ws, ALLOW, reg, LIMITS, "fix(pkg): add numbers", BODY)
+
+
+def test_build_claims_are_handed_on_until_a_pr_exists(gh, fake, tmp_path):
+    from conftest import issue_json
+    from pr_agent.publish import claim_updates
+    fake.add("GET", "/user", {"login": "agent"})
+    fake.add("GET", "/repos/o/r/issues/7", issue_json("o/r", 7, created_at="2026-01-01T00:00:00Z"))
+    fake.add("GET", "/repos/o/r/issues/7/comments*", [])
+    reg = Registry(tmp_path)
+    reg.save_claim("issue:o/r#7", {"repo": "o/r", "number": 7, "comment_id": 1, "claimed_at": "2026-01-01T00:00:00+00:00", "status": "build"})
+    assert [c["state"] for c in claim_updates(gh, reg)] == ["build"]
+    reg.save_pr("o/r#9", {"repo": "o/r", "number": 9, "issue_id": "issue:o/r#7", "state": "open"})
+    assert claim_updates(gh, reg) == []
