@@ -76,7 +76,7 @@ class App:
     def guard(self) -> Any:
         u = self.s.agent.get("usage", {})
         hermes_home = Path(os.environ.get("HERMES_HOME", Path.home() / ".hermes"))
-        return report(hermes_home / "state.db", menu(self.s.agent), u.get("monthly_budget_usd", 20), u.get("daily_budget_usd", 3))
+        return report(hermes_home / "state.db", menu(self.s.agent), u.get("monthly_budget_usd", 20), u.get("daily_budget_usd", 3), served_model=u.get("served_model", ""))
 
     def spend(self, hf_month_usd: float | None = None) -> list[Any]:
         if hf_month_usd is None:
@@ -99,7 +99,7 @@ class App:
         since = datetime.strptime(start, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc).timestamp()
         u = self.s.agent.get("usage", {})
         hermes_home = Path(os.environ.get("HERMES_HOME", Path.home() / ".hermes"))
-        by_model = report(hermes_home / "state.db", menu(self.s.agent), u.get("monthly_budget_usd", 20), 0, since=since).by_model
+        by_model = report(hermes_home / "state.db", menu(self.s.agent), u.get("monthly_budget_usd", 20), 0, since=since, served_model=u.get("served_model", "")).by_model
         label = read_json(self.s.state_dir / "current_run.json", {}).get("label", "run")
         return append_tokens(self.s.ledger_dir / "tokens.tsv", run, f"pr-agent-{label}", by_model)
 
