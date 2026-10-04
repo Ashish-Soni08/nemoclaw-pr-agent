@@ -86,12 +86,29 @@ def lambda_hours(state_dir: Path, rate_usd: float, credit_usd: float, proc: Path
     return SpendRow("lambda", round(hours, 3), "hours", round(cost, 4), max(credit_usd - cost, 0), credit_usd, source)
 
 
+def lambda_billed(instances: list[dict[str, Any]], rate_usd: float, credit_usd: float, now: datetime | None = None) -> SpendRow:
+    """Lambda bills every hour an instance exists, run or not: wall-clock from launch to end (or now)."""
+    now = now or datetime.now(timezone.utc)
+    hours, cost, running = 0.0, 0.0, []
+    for inst in instances:
+        start = datetime.fromisoformat(str(inst["launched_at"]).replace("Z", "+00:00"))
+        end = datetime.fromisoformat(str(inst["ended_at"]).replace("Z", "+00:00")) if inst.get("ended_at") else now
+        h = max((end - start).total_seconds(), 0) / 3600
+        hours += h
+        cost += h * float(inst.get("hourly_usd", rate_usd))
+        if not inst.get("ended_at"):
+            running.append(f"{inst.get('name', 'vm')} running since {start.strftime('%Y-%m-%d %H:%M')} UTC")
+    source = "estimate:wall-clock since launch x hourly rate" + (f"; {', '.join(running)}" if running else "")
+    return SpendRow("lambda", round(hours, 3), "hours", round(cost, 4), max(credit_usd - cost, 0), credit_usd, source)
+
+
 def snapshot(state_dir: Path, ledger_dir: Path, cfg: dict[str, Any], hf_month_usd: float, firecrawl_key: str = "") -> list[SpendRow]:
     s = cfg.get("spend", {})
     rows = [
         huggingface(hf_month_usd, cfg.get("usage", {}).get("monthly_budget_usd", 20)),
         firecrawl(CreditBook(state_dir / "firecrawl_credits.tsv"), s.get("firecrawl_plan_credits", 1000), firecrawl_key),
-        lambda_hours(state_dir, s.get("lambda_hourly_usd", 1.29), s.get("lambda_credit_usd", 75)),
+        lambda_billed(s["lambda_instances"], s.get("lambda_hourly_usd", 1.29), s.get("lambda_credit_usd", 75)) if s.get("lambda_instances")
+        else lambda_hours(state_dir, s.get("lambda_hourly_usd", 1.29), s.get("lambda_credit_usd", 75)),
     ]
     append(ledger_dir / "spend.tsv", rows)
     return rows

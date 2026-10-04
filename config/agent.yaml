@@ -100,3 +100,11 @@ spend:
   firecrawl_plan_credits: 70000 # Ashish's Firecrawl credit (2026-10-01)
   lambda_hourly_usd: 1.29       # 1x A10 on-demand (no V100 available on 2026-10-01)
   lambda_credit_usd: 500        # Ashish's Lambda credit (2026-10-01)
+  # Lambda bills from launch until the instance is terminated, whether the agent runs or not.
+  # Times from Lambda's usage page (Ashish, 2026-10-04). Add ended_at when an instance is terminated.
+  lambda_instances:
+    - name: claude-code
+      launched_at: "2026-10-01T19:04:00Z"
+      ended_at: "2026-10-01T20:00:00Z"
+    - name: nemoclaw-agent-challenge
+      launched_at: "2026-10-02T18:28:00Z"

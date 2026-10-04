@@ -160,3 +160,14 @@ def test_router_models_pins_cheapest_provider_with_tools(monkeypatch):
     got = usage.router_models("https://router", "t")["a/m"]
     assert got["pin"] == "a/m:mid" and got["pin_price"] == [0.3, 0.5]
     assert [p["provider"] for p in got["providers"]] == ["cheap", "mid", "pricey"]
+
+
+def test_lambda_bills_wall_clock_since_launch():
+    from datetime import datetime, timezone
+    from pr_agent.spend import lambda_billed
+    insts = [{"name": "old", "launched_at": "2026-10-01T19:04:00Z", "ended_at": "2026-10-01T20:00:00Z"},
+             {"name": "vm", "launched_at": "2026-10-02T18:28:00Z"}]
+    row = lambda_billed(insts, 1.29, 500, now=datetime(2026, 10, 4, 18, 19, tzinfo=timezone.utc))
+    assert round(row.used, 2) == round(56 / 60 + 47 + 51 / 60, 2)
+    assert round(row.cost_usd, 2) == round(row.used * 1.29, 2)
+    assert "vm running since 2026-10-02 18:28 UTC" in row.source and "old" not in row.source
