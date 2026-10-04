@@ -17,6 +17,8 @@ import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+from .runnow import run_in_progress
+
 COLUMNS = ("ts", "run", "cpu_pct", "load1", "ram_used_gb", "ram_total_gb", "gpu_util_pct", "vram_used_gb", "vram_total_gb",
            "disk_used_gb", "disk_total_gb", "agent_cpu_cores", "agent_ram_gb", "agent_vram_gb", "agent_disk_gb")
 KEEP = timedelta(days=7)
@@ -24,10 +26,6 @@ GB = 1024 ** 3
 # Processes that make up the agent: the OpenShell/NemoClaw gateway and everything in the sandbox.
 AGENT_PROCS = os.environ.get("PR_AGENT_PROC_PATTERN", r"openshell|nemoclaw|hermes|k3s|containerd-shim")
 CGROUP_ROOT = Path("/sys/fs/cgroup")
-# A run with no end row (a crashed session) stops counting as in progress after this long.
-RUN_MAX = timedelta(hours=2)
-# Longer than a fix sub-agent may work without writing a ledger row (its timeout is 60 min).
-RUN_QUIET = timedelta(minutes=70)
 DISK_EVERY = timedelta(minutes=15)
 
 
@@ -160,29 +158,12 @@ def cgroup_pids(cgroups: set[str], root: Path = CGROUP_ROOT) -> set[int]:
 
 
 def current_run(decisions: Path, now: datetime) -> str:
-    """The run in progress per the ledger mirror, or "-"."""
+    """The run in progress per the ledger mirror, or "-" (same rule as `pr-agent run-now`)."""
     if not decisions.exists():
         return "-"
-    started, ended, last = {}, set(), {}
     with decisions.open(encoding="utf-8") as fh:
-        for r in csv.DictReader(fh, delimiter="\t", quoting=csv.QUOTE_NONE):
-            run = r.get("run", "")
-            last[run] = r.get("ts", "")
-            if r.get("phase") == "start":
-                started[run] = r.get("ts", "")
-            elif r.get("phase") == "run.end":
-                ended.add(run)
-    live = [(ts, run) for run, ts in started.items() if run and run not in ended]
-    for ts, run in sorted(live, reverse=True):
-        try:
-            age = now - datetime.fromisoformat(ts.replace("Z", "+00:00"))
-            quiet = now - datetime.fromisoformat(last[run].replace("Z", "+00:00"))
-        except ValueError:
-            continue
-        # A run that crashed never logs run.end; treat a long silence as over.
-        if age <= RUN_MAX and quiet <= RUN_QUIET:
-            return run
-    return "-"
+        rows = list(csv.DictReader(fh, delimiter="\t", quoting=csv.QUOTE_NONE))
+    return run_in_progress(rows, now) or "-"
 
 
 def agent_disk_gb(state: dict, now: datetime) -> float | None:

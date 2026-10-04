@@ -44,15 +44,17 @@ def test_cpu_counts_only_cgroups_seen_in_both_samples():
     assert hs.cpu_cores(prev, cur, 60) == 0.5
 
 
-def test_current_run_ignores_finished_and_stale_runs(tmp_path):
+def test_current_run_ignores_finished_skipped_and_stale_runs(tmp_path):
     led = tmp_path / "decisions.tsv"
     rows = [
-        ("2026-10-04T16:00:00Z", "old", "start"),  # never ended, but too long ago
-        ("2026-10-04T18:30:00Z", "done", "start"), ("2026-10-04T18:40:00Z", "done", "run.end"),
-        ("2026-10-04T19:30:00Z", "live", "start"),
-        ("2026-10-04T18:00:00Z", "crashed", "start"),  # quiet for 70+ minutes
+        ("2026-10-04T16:00:00Z", "old", "start", "started run run"),  # never ended, but too long ago
+        ("2026-10-04T18:00:00Z", "crashed", "start", "started run run"),  # quiet for 70+ minutes...
+        ("2026-10-04T19:55:00Z", "crashed", "chat.request", "asked on Telegram"),  # ...chat doesn't revive it
+        ("2026-10-04T18:30:00Z", "done", "start", "started run run"), ("2026-10-04T18:40:00Z", "done", "run.end", "sent"),
+        ("2026-10-04T19:58:00Z", "skip", "start", "started skipped run"),  # budget guard: never ran
+        ("2026-10-04T19:30:00Z", "live", "start", "started run run"),
     ]
-    led.write_text("ts\trun\tphase\tsubject\n" + "".join(f"{t}\t{r}\t{p}\tx\n" for t, r, p in rows))
+    led.write_text("ts\trun\tphase\tsubject\tdecision\n" + "".join(f"{t}\t{r}\t{p}\tx\t{d}\n" for t, r, p, d in rows))
     assert hs.current_run(led, NOW) == "live"
     assert hs.current_run(led, NOW + timedelta(hours=3)) == "-"
 

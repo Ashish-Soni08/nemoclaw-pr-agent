@@ -70,7 +70,9 @@ def run_in_progress(rows: list[dict[str, str]], now: datetime) -> str:
     """Id of a run that started recently and hasn't logged run.end, or ""."""
     started, ended, last = {}, set(), {}
     for r in rows:
-        last[r.get("run", "")] = r.get("ts", "")
+        # Chat rows carry the last run's id but aren't that run's activity.
+        if not r.get("phase", "").startswith("chat."):
+            last[r.get("run", "")] = r.get("ts", "")
         if r.get("phase") == "start" and r.get("decision", "").startswith("started") and "skipped" not in r.get("decision", ""):
             started[r.get("run", "")] = r.get("ts", "")
         elif r.get("phase") == "run.end":
