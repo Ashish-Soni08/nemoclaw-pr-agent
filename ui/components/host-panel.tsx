@@ -6,6 +6,7 @@ import { cn } from "@/lib/utils";
 const NAME: Record<HostMetric["key"], string> = { gpu: "GPU", cpu: "CPU", ram: "RAM", disk: "Disk" };
 // More than two sync intervals without a new sample means the sampler or the sync stopped.
 const STALE_MS = 15 * 60 * 1000;
+const r1 = (v: number) => Math.round(v * 10) / 10;
 
 export function HostPanel({ host, now }: { host: HostView; now: string }) {
   if (!host) {
@@ -36,7 +37,8 @@ export function HostPanel({ host, now }: { host: HostView; now: string }) {
           <i className="inline-block h-2.5 w-3.5 border bg-accent" />
           agent run in progress
         </span>
-        <span>last 6 hours · hover a chart for the peak</span>
+        <span>Big numbers are the whole VM, including work that isn’t the agent (such as model experiments). “Agent” is the agent’s own share.</span>
+        <span>Last 6 hours · hover a chart for the peak</span>
       </div>
     </section>
   );
@@ -52,11 +54,11 @@ function Metric({ m, running }: { m: HostMetric; running: boolean[] }) {
       <Label>{NAME[m.key]}</Label>
       <div className="font-mono text-[22px] leading-tight font-semibold">
         {m.now === null ? "–" : pct ? `${Math.round(m.now * 10) / 10}%` : Math.round(m.now * 10) / 10}{" "}
-        <small className="text-xs font-normal text-muted-foreground">{pct ? (m.key === "cpu" ? "of all cores" : "utilization") : m.total !== null ? `of ${m.total.toLocaleString("en")} GB` : "GB"}</small>
+        <small className="text-xs font-normal text-muted-foreground">{pct ? (m.key === "cpu" ? "of all cores" : "utilization") : m.total !== null ? `of ${Math.round(m.total).toLocaleString("en")} GB` : "GB"}</small>
       </div>
       <span className="text-xs text-muted-foreground">
         {m.key === "disk" ? "Agent workspaces" : "Agent"}{" "}
-        <b className="font-mono font-medium text-foreground">{m.agent === null ? "–" : m.key === "cpu" ? `${m.agent} cores` : `${m.agent} GB${m.key === "gpu" ? " VRAM" : ""}`}</b>
+        <b className="font-mono font-medium text-foreground">{m.agent === null ? "–" : m.key === "cpu" ? `${r1(m.agent)} cores` : `${r1(m.agent)} GB${m.key === "gpu" ? " VRAM" : ""}`}</b>
         {m.extra ? ` · ${m.extra}` : null}
       </span>
       <Spark series={m.series} running={running} label={`${NAME[m.key]}, last 6 hours${peak === null ? "" : `, peak ${Math.round(peak * 10) / 10}${unit}`}`} />

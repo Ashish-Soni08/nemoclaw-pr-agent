@@ -365,7 +365,7 @@ function host(rows: HostRow[]): HostView {
         now: latest.gpu_util_pct,
         total: 100,
         agent: latest.agent_vram_gb,
-        extra: latest.vram_used_gb !== null && latest.vram_total_gb !== null ? `VRAM ${fixed1(latest.vram_used_gb)} of ${latest.vram_total_gb} GB` : null,
+        extra: latest.vram_used_gb !== null && latest.vram_total_gb !== null ? `VRAM ${fixed1(latest.vram_used_gb)} of ${Math.round(latest.vram_total_gb)} GB` : null,
         series: pick((r) => r.gpu_util_pct),
       },
       {
@@ -376,7 +376,14 @@ function host(rows: HostRow[]): HostView {
         extra: latest.load1 !== null ? `load ${latest.load1}` : null,
         series: pick((r) => r.cpu_pct),
       },
-      { key: "ram", now: latest.ram_used_gb, total: latest.ram_total_gb, agent: latest.agent_ram_gb, extra: null, series: pick((r) => r.ram_used_gb) },
+      {
+        key: "ram",
+        now: latest.ram_used_gb,
+        total: latest.ram_total_gb,
+        agent: latest.agent_ram_gb,
+        extra: latest.ram_used_gb !== null && latest.agent_ram_gb !== null ? `everything else ${fixed1(Math.max(latest.ram_used_gb - latest.agent_ram_gb, 0))} GB` : null,
+        series: pick((r) => r.ram_used_gb),
+      },
       { key: "disk", now: latest.disk_used_gb, total: latest.disk_total_gb, agent: latest.agent_disk_gb, extra: null, series: pick((r) => r.disk_used_gb) },
     ],
   };
