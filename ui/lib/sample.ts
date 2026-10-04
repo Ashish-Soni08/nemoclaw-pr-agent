@@ -87,7 +87,7 @@ export const SAMPLE: Record<string, string> = {
 2026-10-01T12:21:30Z	lambda	26.5	hours	34.185	465.815	500	estimate:uptime x hourly rate (all boots)
 2026-10-01T14:49:12Z	huggingface	6.45	usd	6.45	393.55	400	estimate:hermes-state.db x menu prices (month to date)
 2026-10-01T14:49:12Z	firecrawl	830	credits	0	69170	70000	api:/v2/team/credit-usage (remaining); local (used)
-2026-10-01T14:49:12Z	lambda	29	hours	37.41	462.59	500	estimate:uptime x hourly rate (all boots)
+2026-10-01T14:49:12Z	lambda	29	hours	37.41	462.59	500	estimate:wall-clock since launch x hourly rate; nemoclaw-agent-challenge running since 2026-09-28 19:00 UTC
 `,
   "tokens.tsv": `ts	run	subject	step	model	tokens_in	tokens_out	cost_usd
 2026-09-29T14:03:55Z	r-0929-b	plotwise/plotwise#80	triage	nvidia/Nemotron-Super-49B	182400	9100	0.21
