@@ -15,6 +15,9 @@ CLAIM = re.compile(
     re.IGNORECASE,
 )
 GO_DIRECT_LABELS = {"good first issue", "help wanted", "good-first-issue", "help-wanted", "contributions welcome", "easy"}
+# Labels that mean the issue isn't settled yet: ask a maintainer before building (Ashish, 2026-10-04).
+ASK_FIRST_LABELS = {"needs-triage", "needs triage", "triage", "needs-discussion", "needs discussion", "discussion",
+                    "design", "rfc", "proposal", "question", "needs-design", "needs design", "status: needs triage"}
 OSI_UNKNOWN = {None, "", "NOASSERTION", "OTHER"}
 
 
@@ -89,4 +92,4 @@ def verify_hit(gh: GitHub, full: str, number: int, cfg: dict[str, Any], now: dat
 
 def lane_hint(issue: dict[str, Any]) -> str:
     labels = {l["name"].lower() for l in issue.get("labels", [])}
-    return "go-directly" if labels & GO_DIRECT_LABELS else "ask-first"
+    return "ask-first" if labels & ASK_FIRST_LABELS else "go-directly"

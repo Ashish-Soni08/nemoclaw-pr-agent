@@ -176,8 +176,8 @@ One line per surviving issue, handed to check-ai-policy and triage:
 }
 ```
 
-`lane_hint`: `go-directly` when labelled good first issue or help wanted;
-otherwise `ask-first`. check-ai-policy overrides it to `ask-first` when the
+`lane_hint`: `ask-first` when labelled needs-triage, needs-discussion, design,
+RFC, proposal or question; otherwise `go-directly`. check-ai-policy overrides it to `ask-first` when the
 repo's CONTRIBUTING asks contributors to claim issues, and drops the repo when
 the policy bans AI contributions.
 

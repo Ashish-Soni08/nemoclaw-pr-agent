@@ -11,7 +11,7 @@ Built for the **NVIDIA Berlin Claw Agent Challenge**: build a long-running agent
 A Hermes agent in a NemoClaw sandbox on a Lambda Cloud VM. It works on a schedule with no human approval step:
 
 - **Every 4 hours** it searches the Firecrawl Developer Index for open issues in AI and data-science repos, checks each one live on GitHub (open, unassigned, nobody on it, not already fixed), and reads the repo's AI-contribution policy.
-- **It triages every candidate** as take or skip and writes down why. Repos that ask contributors to check in first get a plan comment ("ask-first"); the rest get a fix straight away ("go-directly").
+- **It triages every candidate** as take or skip and writes down why. By default it builds the fix straight away ("go-directly"). It posts a plan comment first ("ask-first") only when the repo asks contributors to check in, the issue is still being triaged or designed, or it's a feature nobody has agreed on.
 - **A fix sub-agent** clones the repo, installs its dependencies, reproduces the problem, fixes it and runs the tests. A self-review gate (a correctness pass and a security pass on the exact diff) decides whether the PR opens.
 - **Every 2 hours** a follow-up job answers review comments on its PRs and picks up maintainer replies to its plans.
 - **Telegram** gets a summary after each run and a daily digest. Every decision, token and dollar goes into an append-only ledger that syncs to a Hugging Face dataset every 5 minutes and feeds the dashboard in `ui/`.
@@ -67,7 +67,7 @@ The agent's behaviour comes from Hermes skills in `skills/`. The router, `pr-age
 | `pr-agent-mode` (router) | Picks the right playbook for each situation: autonomous run, investigation, fix, babysit, pause safely |
 | `discover-work`, `check-ai-policy` | Find issues and read each repo's AI policy; a ban is final, a maintainer's "no" blocks the repo |
 | `triage-issues` | A take or skip with a written reason for every candidate, and the ask-first or go-directly lane |
-| `claim-issue` | A short plan comment for ask-first repos; no work until a maintainer says yes |
+| `claim-issue` | A short plan comment for ask-first issues; no work until a maintainer says yes |
 | `fix-issue`, `systematic-debugging`, `evidence-driven-testing` | Reproduce first, fix the root cause, prove it with tests |
 | `self-review-gate` | A correctness pass and a security pass on the exact diff; the PR opens only on a pass |
 | `follow-up` | Answer review comments, pick up claim replies, record PR outcomes |

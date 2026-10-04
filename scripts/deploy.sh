@@ -21,6 +21,9 @@ nemohermes "$SANDBOX" exec -- bash -c "test -x $SANDBOX_REPO/bin/pr-agent && mkd
 say "Private interpreter for pr-agent (the only binary the GitHub and Firecrawl keys are injected for)"
 nemohermes "$SANDBOX" exec -- bash -c 'mkdir -p /sandbox/.pr-agent/bin && cp -f "$(readlink -f "$(command -v python3)")" /sandbox/.pr-agent/bin/python && PYTHONPATH="$(python3 -c "import sys; print(\":\".join(p for p in sys.path[1:] if p))")" /sandbox/.pr-agent/bin/python -c "import ssl, yaml; print(\"interpreter ok\")"'
 
+say "Provider placeholders for scheduled runs"
+save_provider_placeholders
+
 say "Installing skills"
 for dir in "$REPO_DIR"/skills/*/; do
   name="$(basename "$dir")"
