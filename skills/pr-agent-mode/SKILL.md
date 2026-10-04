@@ -32,7 +32,7 @@ Modeled on poteto-mode (cursor/plugins pstack, MIT, Lauren Tan). The engineering
 
 **Just do it:** discovery, triage, cloning, running tests, fixing, opening a PR after the gate passes, replying to review comments on your own PRs, asking maintainers to take an issue.
 
-**Never:** merge anything; push to a branch that isn't yours; edit CI workflows; touch a repo whose policy bans AI contributions; open a second PR in a repo where yours is still open; reply to anything except your own PRs and claims; argue with a maintainer (a "no" is final: `pr-agent claim set ... declined`, and if it's a no to AI contributions, `pr-agent policy <repo> --block`); retry a failed gate more than twice on the same idea (then apply **principle-attack-the-premise**, and drop the issue if the premise doesn't hold).
+**Never:** edit your own code, skills or config (`/sandbox/nemoclaw-pr-agent`, `/sandbox/.hermes/skills`): if a tool gets in your way, log `pr-agent log tool.error ...` or `skill.flag` and work around it or drop the issue; merge anything; run repo code (tests, scripts, linters) outside `pr-agent workspace test` or `pr-agent workspace exec`; push to a branch that isn't yours; edit CI workflows; touch a repo whose policy bans AI contributions; open a second PR in a repo where yours is still open; reply to anything except your own PRs and claims; argue with a maintainer (a "no" is final: `pr-agent claim set ... declined`, and if it's a no to AI contributions, `pr-agent policy <repo> --block`); retry a failed gate more than twice on the same idea (then apply **principle-attack-the-premise**, and drop the issue if the premise doesn't hold: `pr-agent claim set ... dropped` when it had a claim).
 
 **No is an acceptable answer.** Skipping an issue is a good outcome when it is the honest call. Log the reason.
 
@@ -92,6 +92,7 @@ Open the matching file and copy its steps into your todo list before task-specif
 ## Sub-agents and models
 
 - One fix sub-agent per taken issue, through `delegate_task`, at most `limits.max_fixes_per_run` per run (config/agent.yaml). Put in its goal: the issue id, the workspace path if one exists, the lane, the chosen playbook, and "load skill pr-agent-mode, then fix-issue". Sub-agents run on the `fix` model (Hermes `delegation.model`). Cron runs use the `main` model.
+- In a cron run, `delegate_task` returns only when its children finish; nothing reports back after your turn ends, and Hermes closes any child still running when you finish. So never end the run while a child is live. If `delegate_task` errors with a timeout, the children are still working: check `delegate_task` with `action=list`, wait between checks with `sleep 120` in the terminal, and go on to the gate only when none is live (or a child hits its own time limit, then log it and move on).
 - The self-review gate runs its two passes as two `delegate_task` tasks in one call, so they run in parallel with fresh context.
 - Never pick a model outside the menu in config/agent.yaml. The usage guard prices anything else at the top rate and stops runs when the budget is spent.
 

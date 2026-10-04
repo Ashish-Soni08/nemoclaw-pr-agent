@@ -88,7 +88,7 @@ def record_gate(meta: Meta, verdict: str, findings: str, reviewers: list[str]) -
         "reviewers": reviewers,
         "at": utcnow().isoformat(timespec="seconds"),
     }
-    write_json(Path(meta.path) / ".pr-agent" / "gate.json", gate)
+    write_json(meta.gate_path, gate)
     return gate
 
 
@@ -98,9 +98,51 @@ def check_body(body: str) -> None:
         raise Refused(f"PR body is missing {', '.join(missing)}")
     if "## Summary" in body or "## Test plan" in body:
         raise Refused("PR body uses Summary/Test plan boilerplate; use Why, Scope, Blast Radius, Verification")
-    # The AI disclosure goes after the body; anything left open here would swallow it.
-    if body.count("<!--") > body.count("-->") or body.count("```") % 2 or body.lower().count("<details") > body.lower().count("</details>"):
-        raise Refused("PR body has an unclosed comment, code fence or <details> block")
+    # The full AI disclosure goes after the body; anything left open here would swallow it.
+    # (A one-line disclosure also goes first, where nothing in the body can hide it.)
+    if leaves_open(body):
+        raise Refused("PR body has raw HTML (a comment, <details> or HTML block) or an unclosed code fence; "
+                      "write plain Markdown and close every fence")
+
+
+# A fence-like line, with whatever indentation, blockquote or list markers come before it.
+FENCE = re.compile(r"([ \t>]*(?:(?:[-*+]|\d{1,9}[.)])[ \t]+[ \t>]*)*)(`{3,}|~{3,})(.*)$")
+CLOSER = re.compile(r" {0,3}(`{3,}|~{3,})[ \t]*$")
+# Anything that starts HTML GitHub would render: comments and <details> anywhere on a line,
+# and any tag, <!... or <?... at the start of a line, inside a quote or list item or not.
+HTML = re.compile(r"<!--|-->|</?details\b|^[ \t>]*(?:(?:[-*+]|\d{1,9}[.)])[ \t]+[ \t>]*)*<[A-Za-z/!?]", re.I)
+
+
+def leaves_open(body: str) -> bool:
+    """Would anything appended after `body` render inside a code fence, comment or <details>?
+
+    One pass, deliberately strict, so that no construct can close another's opener:
+    - fences are allowed only at the very start of a line. One that is indented, quoted or
+      in a list item ends with its container, so where it ends depends on the container,
+      and it is refused instead. A closer uses the opener's character, at least as many,
+      and nothing after (CommonMark);
+    - outside fences no raw HTML is allowed at all, since an HTML block turns fence lines
+      into raw text and an open comment or <details> hides what follows. Inside a fence
+      (always top level, so everything in it is literal) HTML is fine.
+    A false alarm only means the model rewrites the body in plain Markdown."""
+    fence: str | None = None
+    for line in body.splitlines():
+        if fence is not None:
+            m = CLOSER.match(line)
+            if m and m.group(1)[0] == fence[0] and len(m.group(1)) >= len(fence):
+                fence = None
+            continue
+        m = FENCE.match(line)
+        if m and not (m.group(2)[0] == "`" and "`" in m.group(3)):
+            if m.group(1):
+                return True
+            fence = m.group(2)
+        elif HTML.search(line):
+            return True
+    return fence is not None
+
+
+HEADER = "> Written by an autonomous AI agent ([nemoclaw-pr-agent](https://github.com/Ashish-Soni08/nemoclaw-pr-agent)); details at the end.\n\n"
 
 
 def footer(issue_url: str, ledger_url: str, gate: dict[str, Any]) -> str:
@@ -144,7 +186,7 @@ def check_changes(meta: Meta, limits: dict[str, Any], tree: str | None = None) -
 def gated_tree(meta: Meta) -> str:
     """Stage the workspace once and return its tree, if the gate passed on exactly that tree."""
     ws = Path(meta.path)
-    gate = read_json(ws / ".pr-agent" / "gate.json", None)
+    gate = read_json(meta.gate_path, None)
     if not gate:
         raise Refused("no self-review gate verdict for this workspace")
     if gate["verdict"] != "pass":
@@ -157,7 +199,7 @@ def gated_tree(meta: Meta) -> str:
 
 def preflight(meta: Meta, policy: PolicyVerdict, registry: Registry, limits: dict[str, Any], title: str, body: str, allow_unclear: bool = False) -> tuple[dict[str, Any], dict[str, Blob | None]]:
     tree = gated_tree(meta)
-    gate = read_json(Path(meta.path) / ".pr-agent" / "gate.json", {})
+    gate = read_json(meta.gate_path, {})
     claim = registry.claims().get(meta.issue_id)
     # "build": we posted a plan, nobody answered, and the build-directly default (Ashish, 2026-10-04)
     # lets us open the PR anyway, unless the repo itself asks contributors to wait for a yes.
@@ -185,7 +227,7 @@ def open_pr(gh: GitHub, meta: Meta, policy: PolicyVerdict, registry: Registry, l
         ledger.log("pr.refused", meta.issue_id, "did not open PR", str(why), meta.path, "refused")
         raise
     issue_url = f"https://github.com/{meta.repo}/issues/{meta.number}"
-    full_body = body.rstrip() + "\n" + footer(issue_url, ledger_url, gate)
+    full_body = HEADER + body.rstrip() + "\n" + footer(issue_url, ledger_url, gate)
     fork = gh.ensure_fork(meta.repo)
     gh.sync_fork(fork, meta.base_branch)
     commit_sha = gh.push_files(fork, meta.branch, meta.base_sha, changes, f"{title}\n\nFixes {issue_url}")

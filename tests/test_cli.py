@@ -64,3 +64,24 @@ def test_run_start_records_run_config(home):
     assert got["config"].startswith("config/agent.yaml @ ")
     assert got["model.triage"] == "zai-org/GLM-5.3" and got["model.fix"] == "Qwen/Qwen3-Coder-480B-A35B-Instruct"
     assert set(got) >= {"model.gate", "model.summary", "firecrawl.per_run_credits", "schedule"}
+
+
+def test_agent_side_drop_is_not_recorded_as_a_maintainer_no(home, capsys, monkeypatch):
+    monkeypatch.setenv("GITHUB_TOKEN", "x")
+    from pr_agent.cli import App
+    App().registry.save_claim("issue:o/r#3", {"repo": "o/r", "number": 3, "status": "waiting", "comment_url": "https://github.com/o/r/issues/3#c1"})
+    assert cli.main(["claim", "set", "issue:o/r#3", "dropped", "--why", "fix needs a CI workflow edit"]) == 0
+    assert json.loads(capsys.readouterr().out)["status"] == "dropped"
+    row = (home / "ledger" / "decisions.tsv").read_text().splitlines()[-1].split("\t")
+    assert row[2:5] == ["claim.status", "issue:o/r#3", "claim dropped"]
+
+
+def test_changed_agent_code_is_logged_for_a_human(home, git_repo, monkeypatch):
+    from pr_agent.cli import App
+    monkeypatch.setattr(cli, "REPO_ROOT", git_repo)
+    app = App()
+    assert app.code_drift("r1") == ""
+    (git_repo / "pkg.py").write_text("def add(a, b):\n    return a + b\n")
+    assert "pkg.py" in app.code_drift("r1")
+    row = (home / "ledger" / "decisions.tsv").read_text().splitlines()[-1].split("\t")
+    assert row[2:5] == ["tool.error", "r1", "pr-agent's own code was changed since deploy"]

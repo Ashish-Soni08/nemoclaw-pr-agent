@@ -193,3 +193,16 @@ def test_firecrawl_remaining_comes_from_the_api(tmp_path):
     row = firecrawl(book, 70000, client=C())
     assert (row.used, row.remaining, row.limit) == (396, 73633, 74029)
     assert row.source.startswith("api:")
+
+
+def test_sessions_are_priced_as_the_served_model(tmp_path):
+    import sqlite3
+    from datetime import datetime, timezone
+    db = tmp_path / "state.db"
+    con = sqlite3.connect(db)
+    con.execute("CREATE TABLE sessions (model TEXT, input_tokens INT, cache_read_tokens INT, cache_write_tokens INT, output_tokens INT, reasoning_tokens INT, started_at REAL)")
+    now = datetime(2026, 10, 4, 12, tzinfo=timezone.utc)
+    con.execute("INSERT INTO sessions VALUES ('Qwen/Qwen3.5-397B-A17B', 1000000, 0, 0, 0, 0, ?)", (now.timestamp(),))
+    con.commit(); con.close()
+    assert report(db, MENU, 10, 0, now=now).month_usd == 0.6
+    assert report(db, MENU, 10, 0, now=now, served_model="nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-FP8").month_usd == 0.5

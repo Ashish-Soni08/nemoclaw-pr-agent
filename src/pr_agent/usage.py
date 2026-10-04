@@ -64,8 +64,12 @@ class UsageReport:
         return ""
 
 
-def report(state_db: Path, entries: list[ModelEntry], month_budget: float, day_budget: float, now: datetime | None = None, since: float | None = None) -> UsageReport:
-    """Spend from Hermes' session records, month to date (or from `since`, an epoch, when given)."""
+def report(state_db: Path, entries: list[ModelEntry], month_budget: float, day_budget: float, now: datetime | None = None, since: float | None = None,
+           served_model: str = "") -> UsageReport:
+    """Spend from Hermes' session records, month to date (or from `since`, an epoch, when given).
+
+    `served_model`: NemoClaw's inference route sends every request to the onboarded model whatever a
+    session asked for, so sessions are priced as that model (Hermes records the requested one)."""
     now = now or datetime.now(timezone.utc)
     month_start = since if since is not None else datetime(now.year, now.month, 1, tzinfo=timezone.utc).timestamp()
     day_start = datetime(now.year, now.month, now.day, tzinfo=timezone.utc).timestamp()
@@ -86,7 +90,7 @@ def report(state_db: Path, entries: list[ModelEntry], month_budget: float, day_b
         finally:
             con.close()
         for model, t_in, t_cached, t_out, started in rows:
-            entry = _lookup(entries, model)
+            entry = _lookup(entries, served_model or model)
             if entry is None:
                 unknown.add(model or "unknown")
                 entry = priciest

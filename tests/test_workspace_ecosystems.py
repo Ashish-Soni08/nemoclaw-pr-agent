@@ -42,3 +42,14 @@ def test_yarn_berry_tests_run_through_corepack(tmp_path):
     assert detect_test_cmd(ws, "node") == "corepack yarn run test"
     (ws / "package.json").write_text(json.dumps({"scripts": {"test": "jest"}}))
     assert detect_test_cmd(ws, "node") == "yarn run test"
+
+
+def test_git_and_curl_get_the_proxy_ca_in_the_scrubbed_env(monkeypatch):
+    from pr_agent.workspace import scrubbed_env
+    monkeypatch.setenv("SSL_CERT_FILE", "/etc/openshell/ca.pem")
+    for k in ("GIT_SSL_CAINFO", "CURL_CA_BUNDLE"):
+        monkeypatch.delenv(k, raising=False)
+    monkeypatch.setenv("PRAGENT_GITHUB_TOKEN", "placeholder")
+    env = scrubbed_env()
+    assert env["GIT_SSL_CAINFO"] == env["CURL_CA_BUNDLE"] == "/etc/openshell/ca.pem"
+    assert "PRAGENT_GITHUB_TOKEN" not in env

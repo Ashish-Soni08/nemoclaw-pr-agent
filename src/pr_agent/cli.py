@@ -24,7 +24,8 @@ from .state import CreditBook, SeenStore, read_json, write_json
 from .spend import append_tokens, snapshot as spend_snapshot
 from .summary import compact_candidates, daily_digest, run_summary
 from .usage import menu, report, router_models
-from .workspace import Meta, diff_text, prepare, run_tests, setup_env
+from .jail import IsolationUnavailable
+from .workspace import Meta, diff_text, isolation_selfcheck, prepare, run, run_tests, setup_env
 
 
 def out(data: Any) -> None:
@@ -75,7 +76,7 @@ class App:
     def guard(self) -> Any:
         u = self.s.agent.get("usage", {})
         hermes_home = Path(os.environ.get("HERMES_HOME", Path.home() / ".hermes"))
-        return report(hermes_home / "state.db", menu(self.s.agent), u.get("monthly_budget_usd", 20), u.get("daily_budget_usd", 3))
+        return report(hermes_home / "state.db", menu(self.s.agent), u.get("monthly_budget_usd", 20), u.get("daily_budget_usd", 3), served_model=u.get("served_model", ""))
 
     def spend(self, hf_month_usd: float | None = None) -> list[Any]:
         if hf_month_usd is None:
@@ -98,7 +99,7 @@ class App:
         since = datetime.strptime(start, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc).timestamp()
         u = self.s.agent.get("usage", {})
         hermes_home = Path(os.environ.get("HERMES_HOME", Path.home() / ".hermes"))
-        by_model = report(hermes_home / "state.db", menu(self.s.agent), u.get("monthly_budget_usd", 20), 0, since=since).by_model
+        by_model = report(hermes_home / "state.db", menu(self.s.agent), u.get("monthly_budget_usd", 20), 0, since=since, served_model=u.get("served_model", "")).by_model
         label = read_json(self.s.state_dir / "current_run.json", {}).get("label", "run")
         return append_tokens(self.s.ledger_dir / "tokens.tsv", run, f"pr-agent-{label}", by_model)
 
@@ -154,6 +155,18 @@ class App:
         result["credits_run"] = index.spent_this_run
         return result
 
+    def code_drift(self, run: str) -> str:
+        """The agent must never edit its own code; a changed checkout is logged for a human."""
+        try:
+            changed = subprocess.run(["git", "-C", str(REPO_ROOT), "status", "--porcelain", "--untracked-files=no"], capture_output=True, text=True, timeout=10).stdout.rstrip()
+        except (OSError, subprocess.SubprocessError):
+            return ""
+        if not changed:
+            return ""
+        files = ", ".join(line[3:] for line in changed.splitlines()[:5])
+        self.ledger.log("tool.error", run, "pr-agent's own code was changed since deploy", "only humans change the agent's tools; redeploy to restore", files, "drift")
+        return f"pr-agent's own code was changed since deploy ({files}). Don't edit it; mention this in the summary."
+
     def prestep_run(self) -> dict[str, Any]:
         g = self.guard()
         if g.over:
@@ -171,7 +184,10 @@ class App:
         if not cands and not follow:
             self.ledger.log("run.end", run, "nothing to do", "no candidates passed checks and nothing to follow up", result["candidates_path"], "idle")
             return {"wakeAgent": True, "context": {"run": run, "candidates": [], "discovery": result, "next": "No work. Run `pr-agent summary run` and reply with its output."}}
-        return {"wakeAgent": True, "context": {"run": run, "candidates": compact_candidates(cands), "discovery": {k: result[k] for k in ("hits", "verified", "candidates", "credits_run", "credits_month") if k in result}, "follow_up": follow, "usage_today_usd": g.day_usd}}
+        ctx = {"run": run, "candidates": compact_candidates(cands), "discovery": {k: result[k] for k in ("hits", "verified", "candidates", "credits_run", "credits_month") if k in result}, "follow_up": follow, "usage_today_usd": g.day_usd}
+        if drift := self.code_drift(run):
+            ctx["warning"] = drift
+        return {"wakeAgent": True, "context": ctx}
 
     def _follow_up_items(self) -> dict[str, Any]:
         if not self.registry.prs() and not self.registry.claims():
@@ -188,7 +204,10 @@ class App:
         if not items:
             return {"wakeAgent": False}
         run = self.run_start("follow-up")
-        return {"wakeAgent": True, "context": {"run": run, "follow_up": items}}
+        ctx = {"run": run, "follow_up": items}
+        if drift := self.code_drift(run):
+            ctx["warning"] = drift
+        return {"wakeAgent": True, "context": ctx}
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -236,6 +255,12 @@ def build_parser() -> argparse.ArgumentParser:
     wt.add_argument("path")
     wt.add_argument("--cmd", default="")
     wt.add_argument("--label", default="after", help="baseline, repro, after")
+    we = wsub.add_parser("exec", help="run any repo code (repro script, linter, pre-commit) inside the jail")
+    we.add_argument("path")
+    we.add_argument("command", nargs=argparse.REMAINDER, help="-- then the command")
+    we.add_argument("--timeout", type=int, default=900)
+
+    sub.add_parser("selfcheck", help="prove repo code is isolated from the agent's state and keys")
 
     gate = sub.add_parser("gate", help="record the self-review gate verdict for the current diff")
     gate.add_argument("path")
@@ -275,7 +300,7 @@ def build_parser() -> argparse.ArgumentParser:
     cs = csub.add_parser("set")
     cs.add_argument("issue_id")
     # build: no answer yet, but the build-directly default says open the PR anyway (never "approved").
-    cs.add_argument("status", choices=["approved", "build", "declined", "expired", "waiting"])
+    cs.add_argument("status", choices=["approved", "build", "declined", "dropped", "expired", "waiting"])
     cs.add_argument("--why", required=True)
 
     sm = sub.add_parser("summary", help="Telegram text")
@@ -324,6 +349,9 @@ def main(argv: list[str] | None = None) -> int:
     except MissingSecret as why:
         print(str(why), file=sys.stderr)
         return 2
+    except IsolationUnavailable as why:
+        print(f"refusing to run repo code: {why}", file=sys.stderr)
+        return 4
 
 
 def dispatch(app: App, a: argparse.Namespace) -> int:  # noqa: C901 - flat command table
@@ -364,6 +392,10 @@ def dispatch(app: App, a: argparse.Namespace) -> int:  # noqa: C901 - flat comma
         out(app.ledger.log(a.phase, a.subject, a.decision, a.why, a.evidence, a.result))
     elif a.cmd == "workspace":
         return workspace_cmd(app, a)
+    elif a.cmd == "selfcheck":
+        res = isolation_selfcheck(app.s.state_dir, app.s.workspaces_dir)
+        out(res)
+        return 0 if res["isolated"] else 1
     elif a.cmd == "gate":
         meta = Meta.load(Path(a.path))
         findings = Path(a.findings_file).read_text()
@@ -451,8 +483,20 @@ def workspace_cmd(app: App, a: argparse.Namespace) -> int:
         out(res)
     elif a.wcmd == "diff":
         print(diff_text(ws, meta.base_sha))
+    elif a.wcmd == "exec":
+        cmd = a.command[1:] if a.command[:1] == ["--"] else a.command
+        if not cmd:
+            raise SystemExit("usage: pr-agent workspace exec <ws> -- <command> [args...]")
+        try:
+            proc = run(cmd, cwd=ws, timeout=a.timeout, jail=ws)
+        except subprocess.TimeoutExpired:
+            print(f"timed out after {a.timeout}s", file=sys.stderr)
+            return 124
+        sys.stdout.write(proc.stdout)
+        sys.stderr.write(proc.stderr)
+        return proc.returncode
     else:
-        out(meta.__dict__)
+        out(meta.__dict__ | {"gate": read_json(meta.gate_path, None)})
     return 0
 
 

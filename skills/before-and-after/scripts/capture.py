@@ -6,6 +6,7 @@ import argparse
 import json
 import os
 import shutil
+import stat
 import subprocess
 import sys
 import tempfile
@@ -13,13 +14,53 @@ from pathlib import Path
 
 SAFE = {"PATH", "HOME", "LANG", "LC_ALL", "TMPDIR", "MPLBACKEND"}
 
+# The repo's script is untrusted, so it runs in pr-agent's jail (src/pr_agent/jail.py).
+sys.path.insert(0, os.path.join(os.environ.get("PR_AGENT_REPO", "/sandbox/nemoclaw-pr-agent"), "src"))
+from pr_agent import jail  # noqa: E402
 
-def run_side(cwd: Path, script: Path, out: Path, python: str) -> subprocess.CompletedProcess[str]:
+
+def meta_of(ws: Path) -> dict:
+    for path in (ws.parent / ".control" / ws.name / "meta.json", ws / ".pr-agent" / "meta.json"):
+        if path.exists():
+            return json.loads(path.read_text())
+    raise SystemExit(f"{ws} is not a prepared workspace")
+
+
+MAX_OUTPUT = 20 * 1024 * 1024
+
+
+def safe_write(dest: Path, data: bytes) -> None:
+    """Write a fresh regular file; never through a link someone left at that path."""
+    dest.unlink(missing_ok=True)
+    fd = os.open(dest, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o644)
+    with os.fdopen(fd, "wb") as fh:
+        fh.write(data)
+
+
+def copy_out(src: Path, dest: Path) -> bool:
+    """Copy what the jailed script wrote, if it is a plain file. The script controls `src`,
+    so a symlink there (to gate.json, a secrets file) must not be followed."""
+    try:
+        # O_NONBLOCK: a FIFO planted at `src` must not hang the open; it is then refused below.
+        fd = os.open(src, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+    except OSError:
+        return False
+    with os.fdopen(fd, "rb") as fh:
+        if not stat.S_ISREG(os.fstat(fh.fileno()).st_mode):
+            return False
+        data = fh.read(MAX_OUTPUT + 1)
+    if len(data) > MAX_OUTPUT:
+        return False
+    safe_write(dest, data)
+    return True
+
+
+def run_side(cwd: Path, script: Path, out: Path, python: str, ws: Path, writable: list[Path]) -> subprocess.CompletedProcess[str]:
     env = {k: v for k, v in os.environ.items() if k in SAFE}
     # Put this side's source first on the path, so the editable install of the fix doesn't leak into "before".
     paths = [str(cwd / "src")] if (cwd / "src").is_dir() else []
     env.update({"OUT": str(out), "MPLBACKEND": "Agg", "PYTHONPATH": os.pathsep.join(paths + [str(cwd)])})
-    return subprocess.run([python, str(script)], cwd=cwd, env=env, capture_output=True, text=True, timeout=600)
+    return subprocess.run([python, str(script)], cwd=cwd, env=env, capture_output=True, text=True, timeout=600, preexec_fn=jail.preexec(ws, writable))
 
 
 def main() -> int:
@@ -30,7 +71,7 @@ def main() -> int:
     a = ap.parse_args()
 
     ws = Path(a.workspace).resolve()
-    meta = json.loads((ws / ".pr-agent" / "meta.json").read_text())
+    meta = meta_of(ws)
     home = Path(os.environ.get("PR_AGENT_HOME", Path.home() / ".pr-agent"))
     slug = Path(meta["path"]).name
     media = home / "ledger" / "media" / slug
@@ -45,11 +86,17 @@ def main() -> int:
         try:
             results = {}
             for side, cwd in (("before", base), ("after", ws)):
+                # The script writes into a scratch dir of its own; only plain files are copied
+                # into the ledger's media folder, which the jail can't write.
+                scratch = Path(tmp) / f"out-{side}"
+                scratch.mkdir()
                 out = media / f"{side}.{a.kind}"
-                proc = run_side(cwd, script, out, python)
-                if a.kind == "txt" and not out.exists():
-                    out.write_text(proc.stdout + proc.stderr)
-                results[side] = {"exit": proc.returncode, "file": str(out), "exists": out.exists()}
+                proc = run_side(cwd, script, scratch / out.name, python, ws, [base, scratch])
+                saved = copy_out(scratch / out.name, out)
+                if a.kind == "txt" and not saved:
+                    safe_write(out, (proc.stdout + proc.stderr).encode()[-MAX_OUTPUT:])
+                    saved = True
+                results[side] = {"exit": proc.returncode, "file": str(out), "exists": saved}
         finally:
             subprocess.run(["git", "worktree", "remove", "--force", str(base)], cwd=ws, capture_output=True)
             shutil.rmtree(base, ignore_errors=True)

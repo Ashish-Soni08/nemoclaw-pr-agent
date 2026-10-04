@@ -28,6 +28,9 @@ ledger:
 usage:
   monthly_budget_usd: 400       # Ashish's Hugging Face credit (2026-10-01); runs stop only when it's spent
   daily_budget_usd: 0           # 0 = no daily cap (Ashish, 2026-10-01: don't hold the agent back)
+  # NemoClaw's route serves every request with the onboarded model, so price all sessions as it.
+  # Clear this once sub-agents get their own route.
+  served_model: zai-org/GLM-5.3
 
 router_url: https://router.huggingface.co/v1
 

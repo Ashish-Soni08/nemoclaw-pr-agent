@@ -40,6 +40,7 @@ def test_tests_run_without_secrets(ws, monkeypatch):
 def test_changed_files_ignores_agent_dirs(ws):
     fix(ws)
     Path(ws.path, "new_test.py").write_text("x = 1\n")
+    (Path(ws.path) / ".pr-agent").mkdir(exist_ok=True)
     (Path(ws.path) / ".pr-agent" / "notes.md").write_text("private")
     changes = changed_files(Path(ws.path), ws.base_sha)
     assert sorted(changes) == ["new_test.py", "pkg.py"]
@@ -112,6 +113,7 @@ def test_open_pr_pushes_via_api_and_adds_footer(ws, tmp_path, gh, fake):
     sent = fake.called("POST", "/repos/o/r/pulls")[0]
     assert sent["head"] == "bot:pr-agent/issue-7" and sent["draft"] is False
     assert "autonomous AI agent" in sent["body"] and "Fixes https://github.com/o/r/issues/7" in sent["body"]
+    assert sent["body"].startswith("> Written by an autonomous AI agent")
     assert reg.prs()["o/r#42"]["state"] == "open"
     assert led.rows()[-1]["phase"] == "pr.opened"
     with pytest.raises(Refused, match="already have an open PR"):
@@ -227,8 +229,13 @@ def test_refuses_pr_while_claim_is_not_approved(ws, tmp_path):
 def test_refuses_body_that_would_hide_the_disclosure(ws, tmp_path):
     fix(ws)
     record_gate(ws, "pass", "no findings", ["thermo", "security"])
-    with pytest.raises(Refused, match="unclosed"):
-        preflight(ws, ALLOW, Registry(tmp_path), LIMITS, "fix(pkg): add numbers", BODY + "<!-- hidden")
+    for trick in ("<!-- hidden", "--> <!-- hidden", "~~~\nhidden", "````\nhidden", "</details><details>",
+                  "````\n```\nhidden", "~~~\n```\nhidden", "<details>\n<details>x</details>",
+                  "<details>\n```\n</details>\n```\nhidden", "```\n<!--\n```\n-->\nhidden",
+                  "<div>\n```\n</div>\n\n```\nhidden", "<!-- x -->",
+                  "- item\n  ```\n<!--\n```\nhidden", "- item\n  ```\n```\nhidden", "> ```\nx", "- <div>"):
+        with pytest.raises(Refused, match="raw HTML"):
+            preflight(ws, ALLOW, Registry(tmp_path), LIMITS, "fix(pkg): add numbers", BODY + trick)
 
 
 def test_one_open_pr_per_repo_ignores_case(tmp_path):
@@ -259,3 +266,11 @@ def test_build_claims_are_handed_on_until_a_pr_exists(gh, fake, tmp_path):
     assert [c["state"] for c in claim_updates(gh, reg)] == ["build"]
     reg.save_pr("o/r#9", {"repo": "o/r", "number": 9, "issue_id": "issue:o/r#7", "state": "open"})
     assert claim_updates(gh, reg) == []
+
+
+def test_balanced_markup_is_fine():
+    from pr_agent.publish import leaves_open
+    ok = "```py\nx = 1\n```\n\n````\n```\n<!-- literal -->\n<details>\n````\nUse `a < b` here.\n"
+    assert not leaves_open(ok)
+    # Inside an HTML block GitHub renders fence lines as raw text, so any raw HTML counts.
+    assert leaves_open("<div>\n```\n<details>\n```\n</div>\n")
