@@ -1,5 +1,7 @@
 # nemoclaw-pr-agent
 
+<p align="center"><img src="docs/media/infographic.png" alt="NemoClaw PR Agent: find issues every 4 hours, triage against each repo's AI policy, fix and run tests, pass a correctness and security gate, open the PR and follow up on reviews every 2 hours. Sandboxed on NVIDIA NemoClaw, every decision logged, Telegram daily digest." width="560"></p>
+
 An autonomous open-source contributor that runs inside NVIDIA NemoClaw. It finds issues where AI contributions are welcome, fixes them in a sandbox, opens pull requests, and logs every decision it makes.
 
 ## The challenge
@@ -14,7 +16,8 @@ A Hermes agent in a NemoClaw sandbox on a Lambda Cloud VM. It works on a schedul
 - **It triages every candidate** as take or skip and writes down why. By default it builds the fix straight away ("go-directly"). It posts a plan comment first ("ask-first") only when the repo asks contributors to check in, the issue is still being triaged or designed, or it's a feature nobody has agreed on.
 - **A fix sub-agent** clones the repo, installs its dependencies, reproduces the problem, fixes it and runs the tests. A self-review gate (a correctness pass and a security pass on the exact diff) decides whether the PR opens.
 - **Every 2 hours** a follow-up job answers review comments on its PRs and picks up maintainer replies to its plans.
-- **Telegram** gets a summary after each run and a daily digest. Every decision, token and dollar goes into an append-only ledger that syncs to a Hugging Face dataset every 5 minutes and feeds the dashboard in `ui/`.
+- **Telegram** gets a summary after each run and a daily digest. The owner can also ask the bot about PRs, claims, issues, runs and spend and get read-only answers, or ask for a run now; that starts the scheduled job early unless a run is already going, the next one is under 30 minutes away, or the budget is spent.
+- **The ledger** gets every decision, token and dollar. It's append-only and syncs to a Hugging Face dataset every 5 minutes and feeds the dashboard in `ui/`.
 
 Example from the first day: 120 issues found, 40 still open on GitHub, 7 candidates, 1 taken ([NVIDIA-NeMo/Gym#2236](https://github.com/NVIDIA-NeMo/Gym/issues/2236), a docs-drift issue with 3 live findings). The agent posted its plan and is waiting for a maintainer before it opens the PR.
 
@@ -44,7 +47,9 @@ The sandbox blocks all network traffic except the hosts below. Keys never enter 
 | Hugging Face write token | The ledger dataset | Host only (`~/.pr-agent-sync.env`); the sandbox never has it |
 | Telegram bot token | One bot | Hermes gateway |
 
-Hard limits are enforced in code, not prompts (`src/pr_agent/publish.py`): a PR only opens if the gate passed on that exact diff and the repo's AI policy allows it; one open PR per repo; at most 400 changed lines and 20 files; it never edits `.github/workflows/` and never merges. Every PR and comment says it was written by an AI agent.
+Hard limits are enforced in code, not prompts (`src/pr_agent/publish.py`): a PR only opens if the gate passed on that exact diff and the repo's AI policy allows it; one open PR per repo; at most 400 changed lines and 20 files; it never edits `.github/workflows/` and never merges. Every PR and comment says it was written by an AI agent, and every PR body opens with a one-line AI disclosure.
+
+Code from the repos it works on runs in a Landlock jail (`src/pr_agent/jail.py`). Installs, tests, repro scripts and linters can write only the workspace, package caches and `/tmp`, and can't see the agent's state, key placeholders or gate verdicts, so a malicious test can't forge a pass. `scripts/deploy.sh` runs `pr-agent selfcheck` and fails the deploy if the jail doesn't hold, and each run checks the agent's own code against a checksum list written at deploy.
 
 ## Languages
 
@@ -99,6 +104,8 @@ A usage guard prices every run against this menu and stops the agent once the mo
 ## Watching it work: the ledger
 
 Nobody approves the agent's PRs before they open, so a human has to be able to check its work afterwards. Every decision it makes (each issue found, each policy check, each take or skip and why, each test run, gate verdict and PR) is one row in an append-only ledger with a reason and a link to the evidence. Tokens and spend go in the same ledger. The VM syncs it to a private Hugging Face dataset every 5 minutes, and a read-only dashboard shows it. That way you can see what the agent did, why, and what it cost, without ever exposing the VM or the sandbox.
+
+The dashboard also shows Hugging Face's own month-to-date bill next to the agent's estimate, and an "Agent resources" panel with the agent's CPU, memory and workspace storage over the last 6 hours, with runs shaded. Each Telegram run summary links to it.
 
 **Dashboard:** [nemoclaw-pr-agent-ledger.vercel.app](https://nemoclaw-pr-agent-ledger.vercel.app)
 
