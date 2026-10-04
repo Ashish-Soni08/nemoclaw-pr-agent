@@ -24,13 +24,16 @@ class ModelEntry:
     price_in: float  # USD per 1M input tokens
     price_out: float  # USD per 1M output tokens
     note: str = ""
+    price_cache_read: float | None = None  # USD per 1M cached input tokens; default 10% of price_in
 
-    def cost(self, tokens_in: int, tokens_out: int) -> float:
-        return tokens_in / 1e6 * self.price_in + tokens_out / 1e6 * self.price_out
+    def cost(self, tokens_in: int, tokens_out: int, tokens_cached: int = 0) -> float:
+        cached = self.price_cache_read if self.price_cache_read is not None else self.price_in * 0.1
+        return tokens_in / 1e6 * self.price_in + tokens_cached / 1e6 * cached + tokens_out / 1e6 * self.price_out
 
 
 def menu(agent_cfg: dict[str, Any]) -> list[ModelEntry]:
-    return [ModelEntry(m["id"], m.get("roles", []), float(m["price_in"]), float(m["price_out"]), m.get("note", "")) for m in agent_cfg.get("models", [])]
+    return [ModelEntry(m["id"], m.get("roles", []), float(m["price_in"]), float(m["price_out"]), m.get("note", ""),
+                       float(m["price_cache_read"]) if m.get("price_cache_read") is not None else None) for m in agent_cfg.get("models", [])]
 
 
 def _lookup(entries: list[ModelEntry], model: str | None) -> ModelEntry | None:
@@ -74,20 +77,23 @@ def report(state_db: Path, entries: list[ModelEntry], month_budget: float, day_b
         con = sqlite3.connect(f"file:{state_db}?mode=ro", uri=True, timeout=10)
         try:
             rows = con.execute(
-                "SELECT model, COALESCE(input_tokens,0)+COALESCE(cache_read_tokens,0)+COALESCE(cache_write_tokens,0), "
+                # Cache reads are most of the input (every turn re-sends the context) and bill at a fraction
+                # of the input price; pricing them at full rate overstated spend ~7x (HF billed $8.05, we said $60).
+                "SELECT model, COALESCE(input_tokens,0)+COALESCE(cache_write_tokens,0), COALESCE(cache_read_tokens,0), "
                 "COALESCE(output_tokens,0)+COALESCE(reasoning_tokens,0), started_at FROM sessions WHERE started_at >= ?",
                 (month_start,),
             ).fetchall()
         finally:
             con.close()
-        for model, t_in, t_out, started in rows:
+        for model, t_in, t_cached, t_out, started in rows:
             entry = _lookup(entries, model)
             if entry is None:
                 unknown.add(model or "unknown")
                 entry = priciest
-            cost = entry.cost(t_in, t_out)
-            agg = by_model.setdefault(model or "unknown", {"in": 0, "out": 0, "usd": 0.0})
+            cost = entry.cost(t_in, t_out, t_cached)
+            agg = by_model.setdefault(model or "unknown", {"in": 0, "cached": 0, "out": 0, "usd": 0.0})
             agg["in"] += t_in
+            agg["cached"] += t_cached
             agg["out"] += t_out
             agg["usd"] += cost
             month += cost

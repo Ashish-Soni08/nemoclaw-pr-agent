@@ -47,7 +47,8 @@ def append(path: Path, rows: list[SpendRow]) -> None:
 
 
 def huggingface(month_usd: float, budget: float) -> SpendRow:
-    return SpendRow("huggingface", month_usd, "usd", month_usd, max(budget - month_usd, 0), budget, "estimate:hermes-state.db x menu prices (month to date)")
+    return SpendRow("huggingface", month_usd, "usd", month_usd, max(budget - month_usd, 0), budget,
+                    "estimate:hermes-state.db tokens x provider prices, cached input at the cache rate (month to date)")
 
 
 def firecrawl(book: CreditBook, plan_credits: int, api_key: str = "", client: Client | None = None) -> SpendRow:
@@ -61,10 +62,15 @@ def firecrawl(book: CreditBook, plan_credits: int, api_key: str = "", client: Cl
             resp = c.request("GET", "/v2/team/credit-usage")
             if resp.ok:
                 data = (resp.json() or {}).get("data", {})
-                if "remaining_credits" in data:
-                    remaining = float(data["remaining_credits"])
-                    source = "api:/v2/team/credit-usage (remaining); local (used)"
-        except OSError:
+                left = data.get("remainingCredits", data.get("remaining_credits"))
+                if left is not None:
+                    # Firecrawl's remaining covers every balance on the team, not just the plan; the limit is what
+                    # was left at the start plus what we used, so the bar adds up. Firecrawl's usage history leaves
+                    # out Developer Index searches, so "used" stays our own count of this agent's calls.
+                    remaining = float(left)
+                    plan_credits = int(remaining + used)
+                    source = "api:/v2/team/credit-usage (remaining, all balances); used = this agent's own calls (local count)"
+        except (OSError, ValueError):
             pass
     return SpendRow("firecrawl", used, "credits", 0.0, remaining, plan_credits, source)
 
@@ -124,6 +130,6 @@ def append_tokens(path: Path, run: str, step: str, by_model: dict[str, dict[str,
     Hermes' session records don't say which issue a session worked on, so run-wide rows
     use subject "-" and the cron job name as the step."""
     ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-    rows = [[ts, run, subject, step, model, str(int(agg["in"])), str(int(agg["out"])), f"{agg['usd']:.4f}"] for model, agg in sorted(by_model.items())]
+    rows = [[ts, run, subject, step, model, str(int(agg["in"] + agg.get("cached", 0))), str(int(agg["out"])), f"{agg['usd']:.4f}"] for model, agg in sorted(by_model.items())]
     append_tsv(path, TOKEN_COLUMNS, rows)
     return len(rows)
