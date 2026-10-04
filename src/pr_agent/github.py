@@ -113,9 +113,15 @@ class GitHub:
     def sync_fork(self, fork: str, branch: str) -> None:
         self.client.request("POST", f"/repos/{fork}/merge-upstream", {"branch": branch})
 
-    def push_files(self, repo: str, branch: str, base_sha: str, changes: dict[str, bytes | None], message: str) -> str:
-        """Commit `changes` on top of `base_sha` and point `branch` at it. None deletes a path."""
-        base_commit = self.client.get_json(f"/repos/{repo}/git/commits/{base_sha}")
+    def branch_head(self, repo: str, branch: str) -> str:
+        return self.client.get_json(f"/repos/{repo}/git/ref/heads/{branch}")["object"]["sha"]
+
+    def compare(self, repo: str, base: str, head: str) -> dict[str, Any]:
+        return self.client.get_json(f"/repos/{repo}/compare/{base}...{head}")
+
+    def push_files(self, repo: str, branch: str, parent: str, changes: dict[str, bytes | None], message: str) -> str:
+        """Commit `changes` on top of `parent` and point `branch` at it. None deletes a path."""
+        base_commit = self.client.get_json(f"/repos/{repo}/git/commits/{parent}")
         tree = []
         for path, content in sorted(changes.items()):
             if content is None:
@@ -124,7 +130,7 @@ class GitHub:
             blob = self._post(f"/repos/{repo}/git/blobs", {"content": base64.b64encode(content).decode(), "encoding": "base64"})
             tree.append({"path": path, "mode": getattr(content, "mode", "100644"), "type": "blob", "sha": blob["sha"]})
         new_tree = self._post(f"/repos/{repo}/git/trees", {"base_tree": base_commit["tree"]["sha"], "tree": tree})
-        commit = self._post(f"/repos/{repo}/git/commits", {"message": message, "tree": new_tree["sha"], "parents": [base_sha]})
+        commit = self._post(f"/repos/{repo}/git/commits", {"message": message, "tree": new_tree["sha"], "parents": [parent]})
         ref = self.client.request("GET", f"/repos/{repo}/git/ref/heads/{branch}")
         if ref.ok:
             self._post(f"/repos/{repo}/git/refs/heads/{branch}", {"sha": commit["sha"], "force": True}, method="PATCH")

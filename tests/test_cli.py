@@ -121,3 +121,43 @@ def test_next_cron_time():
     assert next_cron_time("0 */4 * * *", now) == datetime(2026, 10, 4, 20, 0, tzinfo=timezone.utc)
     assert next_cron_time("30 */2 * * *", now) == datetime(2026, 10, 4, 20, 30, tzinfo=timezone.utc)
     assert next_cron_time("0 9 * * 1", now) is None
+
+
+def test_scripts_next_to_the_keyed_interpreter_are_quarantined(home, tmp_path, monkeypatch):
+    # 2026-10-04: a run wrote probe-*.py into its state folder and ran them with the keyed
+    # interpreter, calling GitHub directly. The next pre-step sets them aside and logs it.
+    from pr_agent.cli import App
+    monkeypatch.setattr(cli, "REPO_ROOT", tmp_path / "no-deploy")
+    app = App()
+    (home / "bin").mkdir(parents=True, exist_ok=True)
+    (home / "bin" / "python").write_text("interpreter")
+    (home / "bin" / "python").chmod(0o755)
+    (home / "probe-ref.py").write_text("import pr_agent")
+    (home / "probe.sh").write_text("exec python")
+    (home / "provider-env").write_text("PLACEHOLDER=1")
+    (home / "workspaces" / "o__r__1").mkdir(parents=True)
+    (home / "workspaces" / "o__r__1" / "setup.py").write_text("repo code")
+
+    warning = app.code_drift("r1")
+
+    assert "probe-ref.py" in warning and "probe.sh" in warning
+    assert not (home / "probe-ref.py").exists() and (home / "quarantine" / "r1" / "probe-ref.py").exists()
+    assert (home / "bin" / "python").exists() and (home / "provider-env").exists()
+    assert (home / "workspaces" / "o__r__1" / "setup.py").exists()
+    row = (home / "ledger" / "decisions.tsv").read_text().splitlines()[-1].split("\t")
+    assert row[2] == "tool.error" and row[-1] == "quarantined"
+    assert app.code_drift("r2") == ""
+
+
+def test_keyed_interpreter_only_runs_the_pr_agent_launcher():
+    from pathlib import Path
+
+    import pr_agent
+    keyed = pr_agent.KEYED_PYTHON
+    assert pr_agent._launched_by_pr_agent("/usr/bin/python3", ["python3", "probe.py"])
+    assert pr_agent._launched_by_pr_agent(keyed, [keyed, "-c", pr_agent.LAUNCH, "pr", "open"])
+    assert not pr_agent._launched_by_pr_agent(keyed, [keyed, "probe-ref.py"])
+    assert not pr_agent._launched_by_pr_agent(keyed, [keyed, "-c", "import pr_agent.github"])
+    # bin/pr-agent must start the interpreter with exactly this program.
+    launcher = (Path(__file__).parents[1] / "bin" / "pr-agent").read_text()
+    assert f"'{pr_agent.LAUNCH}'" in launcher

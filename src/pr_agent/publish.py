@@ -197,6 +197,29 @@ def gated_tree(meta: Meta) -> str:
     return tree
 
 
+def current_parent(gh: GitHub, fork: str, meta: Meta, changes: dict[str, Blob | None], head: str | None = None) -> str:
+    """The commit to build the push on: the fork's base branch as it is now (or `head`).
+
+    The workspace was cloned at meta.base_sha, possibly days ago. Building on that old commit makes
+    the branch roll back everything upstream merged since, CI workflows included, which GitHub
+    refuses (as a 404) for a token without the workflow scope. So build on the current head, but only
+    if upstream touched none of the files we change: then each file's diff is exactly the gated one."""
+    head = head or gh.branch_head(fork, meta.base_branch)
+    if head == meta.base_sha:
+        return head
+    cmp = gh.compare(fork, meta.base_sha, head)
+    if cmp.get("status") not in ("ahead", "identical"):
+        raise Refused(f"{meta.base_branch} on the fork doesn't contain the workspace base {meta.base_sha[:10]}; prepare a fresh workspace")
+    files = cmp.get("files") or []
+    if len(files) >= 300:
+        raise Refused("upstream changed too many files since the workspace base to check them; prepare a fresh workspace")
+    moved = {f.get("filename") for f in files} | {f.get("previous_filename") for f in files}
+    clash = sorted(moved & set(changes))
+    if clash:
+        raise Refused(f"upstream changed {', '.join(clash[:5])} since the workspace base; prepare a fresh workspace and run the gate again")
+    return head
+
+
 def preflight(meta: Meta, policy: PolicyVerdict, registry: Registry, limits: dict[str, Any], title: str, body: str, allow_unclear: bool = False) -> tuple[dict[str, Any], dict[str, Blob | None]]:
     tree = gated_tree(meta)
     gate = read_json(meta.gate_path, {})
@@ -230,7 +253,12 @@ def open_pr(gh: GitHub, meta: Meta, policy: PolicyVerdict, registry: Registry, l
     full_body = HEADER + body.rstrip() + "\n" + footer(issue_url, ledger_url, gate)
     fork = gh.ensure_fork(meta.repo)
     gh.sync_fork(fork, meta.base_branch)
-    commit_sha = gh.push_files(fork, meta.branch, meta.base_sha, changes, f"{title}\n\nFixes {issue_url}")
+    try:
+        parent = current_parent(gh, fork, meta, changes)
+    except Refused as why:
+        ledger.log("pr.refused", meta.issue_id, "did not open PR", str(why), meta.path, "refused")
+        raise
+    commit_sha = gh.push_files(fork, meta.branch, parent, changes, f"{title}\n\nFixes {issue_url}")
     head = f"{fork.split('/')[0]}:{meta.branch}"
     pr = gh.open_pr(meta.repo, head, meta.base_branch, title, full_body, draft)
     key = f"{meta.repo}#{pr['number']}"
@@ -245,6 +273,7 @@ def open_pr(gh: GitHub, meta: Meta, policy: PolicyVerdict, registry: Registry, l
             "state": "open",
             "opened_at": utcnow().isoformat(timespec="seconds"),
             "commit": commit_sha,
+            "parent": parent,
             "workspace": meta.path,
             "seen_comment_ids": [],
         },
