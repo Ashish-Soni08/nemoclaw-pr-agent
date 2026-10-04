@@ -171,3 +171,11 @@ def test_per_run_cap_spans_separate_processes(tmp_path):
     with pytest.raises(CreditCapReached):
         second.search({"query": "q2", "k": 20})
     assert len(fake.calls) == 1
+
+
+def test_lane_hint_builds_directly_unless_the_issue_is_unsettled():
+    from pr_agent.verify import lane_hint
+    assert lane_hint({"labels": []}) == "go-directly"
+    assert lane_hint({"labels": [{"name": "bug"}, {"name": "documentation"}]}) == "go-directly"
+    assert lane_hint({"labels": [{"name": "Needs-Triage"}]}) == "ask-first"
+    assert lane_hint({"labels": [{"name": "RFC"}]}) == "ask-first"

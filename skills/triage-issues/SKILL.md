@@ -49,8 +49,16 @@ Take only when all hold:
 
 ## 5. Pick the lane
 
-- `go-directly` when the issue is labelled good first issue / help wanted (or similar), or the maintainers invited a PR in the thread, and the policy doesn't require claiming.
-- `ask-first` otherwise, and always when `claim_required` is true. That lane posts a short plan with **claim-issue** and waits for a maintainer.
+Build directly by default (Ashish, 2026-10-04): a finished, tested PR is easier for a maintainer to judge than a plan.
+
+- `ask-first` only when one of these holds. That lane posts a short plan with **claim-issue** and waits for a maintainer.
+  1. `claim_required` is true (CONTRIBUTING or the AI policy says to get assigned or discuss first). Always.
+  2. The issue is labelled needs-triage, needs-discussion, design, RFC, proposal or question (or similar).
+  3. It's a feature or changes public behavior (new options, API or output changes) and no maintainer has agreed on the approach in the thread.
+  4. Maintainers in the thread disagree on how to fix it.
+- `go-directly` otherwise. Small bug fixes, docs, tests and typo-level changes always go directly unless rule 1 applies.
+
+`lane_hint` from discovery covers rules 1 and 2 only; you judge 3 and 4 from the thread.
 
 ## 6. Hand off
 
