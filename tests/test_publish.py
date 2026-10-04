@@ -97,6 +97,7 @@ def test_open_pr_pushes_via_api_and_adds_footer(ws, tmp_path, gh, fake):
     fake.add("GET", "/user", {"login": "bot"})
     fake.add("GET", "/repos/bot/r", {"fork": True, "parent": {"full_name": "o/r"}})
     fake.add("POST", "/repos/bot/r/merge-upstream", {})
+    fake.add("GET", "/repos/bot/r/git/ref/heads/main", {"object": {"sha": ws.base_sha}})
     fake.add("GET", f"/repos/bot/r/git/commits/{ws.base_sha}", {"tree": {"sha": "basetree"}})
     fake.add("POST", "/repos/bot/r/git/blobs", {"sha": "blob1"})
     fake.add("POST", "/repos/bot/r/git/trees", {"sha": "tree1"})
@@ -118,6 +119,52 @@ def test_open_pr_pushes_via_api_and_adds_footer(ws, tmp_path, gh, fake):
     assert led.rows()[-1]["phase"] == "pr.opened"
     with pytest.raises(Refused, match="already have an open PR"):
         open_pr(gh, ws, ALLOW, reg, led, LIMITS, "fix(pkg): add numbers", BODY, "")
+    assert led.rows()[-1]["phase"] == "pr.refused"
+
+
+def _fork_moved(fake, ws, compare):
+    fake.add("GET", "/user", {"login": "bot"})
+    fake.add("GET", "/repos/bot/r", {"fork": True, "parent": {"full_name": "o/r"}})
+    fake.add("POST", "/repos/bot/r/merge-upstream", {})
+    fake.add("GET", "/repos/bot/r/git/ref/heads/main", {"object": {"sha": "newhead"}})
+    fake.add("GET", f"/repos/bot/r/compare/{ws.base_sha}...newhead", compare)
+    fake.add("GET", "/repos/bot/r/git/commits/newhead", {"tree": {"sha": "newtree"}})
+    fake.add("POST", "/repos/bot/r/git/blobs", {"sha": "blob1"})
+    fake.add("POST", "/repos/bot/r/git/trees", {"sha": "tree1"})
+    fake.add("POST", "/repos/bot/r/git/commits", {"sha": "commit1"})
+    fake.add("POST", "/repos/bot/r/git/refs", {"ref": "refs/heads/pr-agent/issue-7"})
+    fake.add("POST", "/repos/o/r/pulls", {"number": 42, "html_url": "https://github.com/o/r/pull/42"})
+
+
+def test_push_builds_on_the_current_upstream_head(ws, tmp_path, gh, fake):
+    # Upstream merged CI changes since the workspace was cloned: building on the old base would roll them back.
+    fix(ws)
+    record_gate(ws, "pass", "no findings", ["thermo-nuclear-review", "security-review"])
+    _fork_moved(fake, ws, {"status": "ahead", "files": [{"filename": ".github/workflows/ci.yml"}]})
+    reg, led = Registry(tmp_path), Ledger(tmp_path / "d.tsv", "r1")
+
+    open_pr(gh, ws, ALLOW, reg, led, LIMITS, "fix(pkg): add numbers", BODY, "")
+
+    assert fake.called("POST", "/git/trees")[0]["base_tree"] == "newtree"
+    assert fake.called("POST", "/git/commits")[0]["parents"] == ["newhead"]
+    assert reg.prs()["o/r#42"]["parent"] == "newhead"
+
+
+@pytest.mark.parametrize("compare, why", [
+    ({"status": "ahead", "files": [{"filename": "pkg.py"}]}, "upstream changed pkg.py"),
+    ({"status": "ahead", "files": [{"filename": "new.py", "previous_filename": "pkg.py"}]}, "upstream changed pkg.py"),
+    ({"status": "diverged", "files": []}, "doesn't contain the workspace base"),
+    ({"status": "ahead", "files": [{"filename": f"f{i}"} for i in range(300)]}, "too many files"),
+])
+def test_push_refuses_when_upstream_touched_our_files(ws, tmp_path, gh, fake, compare, why):
+    fix(ws)
+    record_gate(ws, "pass", "no findings", ["thermo-nuclear-review", "security-review"])
+    _fork_moved(fake, ws, compare)
+    reg, led = Registry(tmp_path), Ledger(tmp_path / "d.tsv", "r1")
+
+    with pytest.raises(Refused, match=why):
+        open_pr(gh, ws, ALLOW, reg, led, LIMITS, "fix(pkg): add numbers", BODY, "")
+    assert not fake.called("POST", "/git/commits") and not fake.called("POST", "/pulls")
     assert led.rows()[-1]["phase"] == "pr.refused"
 
 

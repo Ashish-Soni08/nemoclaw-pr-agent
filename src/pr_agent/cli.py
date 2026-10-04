@@ -19,7 +19,7 @@ from .devindex import DevIndex
 from .discover import DiscoveryRun
 from .github import GitHub
 from .ledger import Ledger, append_tsv, sync_to_dataset
-from .publish import Refused, Registry, ack_comments, check_changes, claim_updates, gated_tree, open_pr, post_claim, pr_updates, record_gate
+from .publish import Refused, Registry, ack_comments, check_changes, claim_updates, current_parent, gated_tree, open_pr, post_claim, pr_updates, record_gate
 from .state import CreditBook, SeenStore, read_json, write_json
 from .spend import append as append_spend, append_tokens, huggingface_billed, snapshot as spend_snapshot
 from .summary import compact_candidates, daily_digest, run_summary
@@ -162,6 +162,10 @@ class App:
 
     def code_drift(self, run: str) -> str:
         """The agent must never edit its own code; a changed checkout is logged for a human."""
+        warnings = [w for w in (self.stray_scripts(run), self._changed_code(run)) if w]
+        return " ".join(warnings)
+
+    def _changed_code(self, run: str) -> str:
         manifest = REPO_ROOT / ".deployed-manifest"
         if not manifest.exists():
             return ""
@@ -176,6 +180,25 @@ class App:
         files = ", ".join(changed[:5])
         self.ledger.log("tool.error", run, "pr-agent's own code was changed since deploy", "only humans change the agent's tools; redeploy to restore", files, "drift")
         return f"pr-agent's own code was changed since deploy ({files}). Don't edit it; mention this in the summary."
+
+    def stray_scripts(self, run: str) -> str:
+        """Scripts the agent wrote into its own state folder (where the keyed interpreter lives) are
+        set aside and logged: the only way it may act on GitHub is through pr-agent commands."""
+        home = self.s.home
+        # Top level and bin/ only: caches and workspaces below hold other people's code legitimately.
+        files = [f for d in (home, home / "bin") if d.is_dir() for f in d.iterdir() if f.is_file() and f != home / "bin" / "python"]
+        found = [f for f in files if f.suffix in (".py", ".sh", ".js", ".mjs", ".ts") or os.access(f, os.X_OK)]
+        if not found:
+            return ""
+        jail = home / "quarantine" / run
+        jail.mkdir(parents=True, exist_ok=True)
+        for f in found:
+            target = jail / f.relative_to(home).as_posix().replace("/", "__")
+            f.replace(target)
+            target.chmod(0o600)
+        names = ", ".join(str(f.relative_to(home)) for f in found[:5])
+        self.ledger.log("tool.error", run, "agent wrote its own scripts next to the keyed interpreter", "set aside in quarantine; the agent acts on GitHub only through pr-agent commands", names, "quarantined")
+        return f"Scripts you wrote under {home} were set aside ({names}). Never write or run your own code against GitHub or with {home}/bin/python; mention this in the summary."
 
     def prestep_run(self) -> dict[str, Any]:
         g = self.guard()
@@ -595,7 +618,10 @@ def pr_cmd(app: App, a: argparse.Namespace) -> int:
         except Refused:
             raise Refused("run the self-review gate on the updated diff before pushing") from None
         fork = gh.ensure_fork(meta.repo)
-        sha = gh.push_files(fork, meta.branch, meta.base_sha, check_changes(meta, app.s.agent.get("limits", {}), tree), a.message)
+        changes = check_changes(meta, app.s.agent.get("limits", {}), tree)
+        # Stay on the commit the PR was opened on, so the push only adds the review fixes.
+        parent = current_parent(gh, fork, meta, changes, head=rec.get("parent") or meta.base_sha)
+        sha = gh.push_files(fork, meta.branch, parent, changes, a.message)
         app.registry.save_pr(a.key, {"commit": sha})
         app.ledger.log("follow-up.push", a.key, "pushed review fixes", a.message, sha, "pushed")
         out({"commit": sha})
