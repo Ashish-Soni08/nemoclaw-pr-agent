@@ -56,7 +56,7 @@ Build directly by default (Ashish, 2026-10-04): a finished, tested PR is easier 
   2. The issue is labelled needs-triage, needs-discussion, design, RFC, proposal or question (or similar).
   3. It's a feature or changes public behavior (new options, API or output changes) and no maintainer has agreed on the approach in the thread.
   4. Maintainers in the thread disagree on how to fix it.
-- `go-directly` otherwise. Small bug fixes, docs, tests and typo-level changes always go directly unless rule 1 applies.
+- `go-directly` otherwise. Small bug fixes, docs, tests and typo-level changes go directly unless rule 1 or 2 applies.
 
 `lane_hint` from discovery covers rules 1 and 2 only; you judge 3 and 4 from the thread.
 
