@@ -223,3 +223,17 @@ def test_hold_and_lock_rows_dont_keep_a_crashed_run_alive():
             {"ts": "2026-10-04T21:10:00Z", "run": "r1", "phase": "hold", "decision": "put on hold"},
             {"ts": "2026-10-04T21:12:00Z", "run": "r1", "phase": "lock", "decision": "skipped follow-up"}]
     assert run_in_progress(rows, datetime(2026, 10, 4, 21, 20, tzinfo=timezone.utc)) == ""
+
+
+def test_a_stopped_run_can_be_closed_so_the_lock_frees(home, monkeypatch):
+    from datetime import datetime, timezone
+    from pr_agent import runnow
+    from pr_agent.cli import App, end_run
+    monkeypatch.setattr(runnow, "cron_process_running", lambda: False)
+    app = App()
+    killed = app.run_start("run")
+    assert runnow.run_in_progress(app.ledger.rows(), datetime.now(timezone.utc)) == killed
+    assert end_run(app, "nope", "x")["ended"] is False
+    assert end_run(app, killed, "gateway restarted by operator")["ended"] is True
+    assert runnow.run_in_progress(app.ledger.rows(), datetime.now(timezone.utc)) == ""
+    assert end_run(app, killed, "again")["reason"].endswith("already ended")
