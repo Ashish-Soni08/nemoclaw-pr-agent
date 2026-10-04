@@ -161,3 +161,65 @@ def test_keyed_interpreter_only_runs_the_pr_agent_launcher():
     # bin/pr-agent must start the interpreter with exactly this program.
     launcher = (Path(__file__).parents[1] / "bin" / "pr-agent").read_text()
     assert f"'{pr_agent.LAUNCH}'" in launcher
+
+
+def test_hold_stops_every_github_write_and_scheduled_work(home, capsys, monkeypatch):
+    # 2026-10-04: a run opened a PR nine seconds after its job was paused. A hold is checked
+    # before each write, so it also stops a run that is already going.
+    from pr_agent.cli import App
+    from pr_agent.github import Held
+    from fakes import FakeTransport, client
+    monkeypatch.setenv("PRAGENT_GITHUB_TOKEN", "placeholder")
+    app = App()
+    assert cli.main(["hold", "on", "--why", "owner said stop on Telegram"]) == 0
+    capsys.readouterr()
+    fake = FakeTransport().add("POST", "/repos/o/r/pulls", {"number": 1})
+    gh = app.gh()
+    gh.client = client("https://api.github.com", fake)
+    with pytest.raises(Held, match="owner said stop"):
+        gh.open_pr("o/r", "bot:b", "main", "t", "b", False)
+    assert fake.calls == []
+    assert app.prestep_run() == {"wakeAgent": False} and app.prestep_follow_up() == {"wakeAgent": False}
+    assert app.ledger.rows()[-1]["phase"] == "hold"
+    assert cli.main(["hold", "status"]) == 0 and '"held": true' in capsys.readouterr().out
+    assert cli.main(["hold", "off", "--why", "fixed"]) == 0
+    capsys.readouterr()
+    assert app.hold_reason() == ""
+
+
+def test_follow_up_waits_while_the_main_run_is_going(home):
+    from pr_agent.cli import App
+    app = App()
+    live = app.run_start("run")
+    assert app.prestep_follow_up() == {"wakeAgent": False}
+    row = app.ledger.rows()[-1]
+    assert row["phase"] == "lock" and live in row["why"]
+
+
+def test_run_now_can_start_the_follow_up_and_respects_a_hold(home, tmp_path, monkeypatch):
+    from datetime import datetime, timezone
+    from pr_agent import runnow
+    from pr_agent.cli import App, run_now
+    (tmp_path / "hermes" / "cron").mkdir(parents=True)
+    (tmp_path / "hermes" / "cron" / "jobs.json").write_text(json.dumps({"jobs": [
+        {"id": "j1", "name": "pr-agent-run", "schedule": "0 */4 * * *"},
+        {"id": "j2", "name": "pr-agent-follow-up", "schedule": {"kind": "cron", "expr": "30 */2 * * *"}}]}))
+    started = []
+    monkeypatch.setattr(runnow, "start", lambda job_id, log: started.append(job_id))
+    monkeypatch.setattr(runnow, "cron_process_running", lambda: False)
+    app = App()
+    at = datetime(2026, 10, 4, 21, 0, tzinfo=timezone.utc)
+    assert run_now(app, "check the ComfyUI review", at, follow_up=True)["started"] is True and started == ["j2"]
+    app.set_hold(True, "testing")
+    held = run_now(app, "again", at)
+    assert held["started"] is False and "on hold" in held["reason"]
+
+
+def test_hold_and_lock_rows_dont_keep_a_crashed_run_alive():
+    from datetime import datetime, timezone
+    from pr_agent.runnow import run_in_progress
+    rows = [{"ts": "2026-10-04T20:00:00Z", "run": "r1", "phase": "start", "decision": "started run run"},
+            {"ts": "2026-10-04T20:05:00Z", "run": "r1", "phase": "triage", "decision": "take"},
+            {"ts": "2026-10-04T21:10:00Z", "run": "r1", "phase": "hold", "decision": "put on hold"},
+            {"ts": "2026-10-04T21:12:00Z", "run": "r1", "phase": "lock", "decision": "skipped follow-up"}]
+    assert run_in_progress(rows, datetime(2026, 10, 4, 21, 20, tzinfo=timezone.utc)) == ""

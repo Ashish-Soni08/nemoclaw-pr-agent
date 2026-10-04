@@ -18,10 +18,17 @@ from .http import Client, HttpError
 API = "https://api.github.com"
 
 
+class Held(RuntimeError):
+    """The owner put the agent on hold: no writes to GitHub until they lift it."""
+
+
 @dataclass
 class GitHub:
     client: Client
     sleep: Callable[[float], None] = time.sleep
+    # Returns why writes are on hold, or "". Checked before every write, so a hold set mid-run
+    # stops the next PR, push or comment even inside a run that's already going.
+    hold: Callable[[], str] | None = None
     _repo_cache: dict[str, dict[str, Any]] = field(default_factory=dict)
     _login: str | None = None
 
@@ -89,6 +96,8 @@ class GitHub:
     # Writes
 
     def _post(self, path: str, body: dict[str, Any], method: str = "POST") -> dict[str, Any]:
+        if self.hold and (why := self.hold()):
+            raise Held(why)
         resp = self.client.request(method, path, body)
         if not resp.ok:
             raise HttpError(resp, path)
@@ -111,6 +120,9 @@ class GitHub:
         raise RuntimeError(f"fork {fork} not ready after {wait_s}s")
 
     def sync_fork(self, fork: str, branch: str) -> None:
+        if self.hold and (why := self.hold()):
+            raise Held(why)
+        # Best effort: a fork that can't fast-forward is caught by the push's base check.
         self.client.request("POST", f"/repos/{fork}/merge-upstream", {"branch": branch})
 
     def branch_head(self, repo: str, branch: str) -> str:

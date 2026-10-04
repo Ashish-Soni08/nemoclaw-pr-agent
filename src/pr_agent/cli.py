@@ -17,7 +17,7 @@ from . import policy as policy_mod, runnow
 from .config import REPO_ROOT, MissingSecret, Settings, secret
 from .devindex import DevIndex
 from .discover import DiscoveryRun
-from .github import GitHub
+from .github import GitHub, Held
 from .ledger import Ledger, append_tsv, sync_to_dataset
 from .publish import Refused, Registry, ack_comments, check_changes, claim_updates, current_parent, gated_tree, open_pr, post_claim, pr_updates, record_gate
 from .state import CreditBook, SeenStore, read_json, write_json
@@ -51,7 +51,33 @@ class App:
         return Ledger(self.s.decisions_path, self.run_id)
 
     def gh(self) -> GitHub:
-        return GitHub.create(os.environ.get("PRAGENT_GITHUB_TOKEN") or secret("GITHUB_TOKEN"))
+        gh = GitHub.create(os.environ.get("PRAGENT_GITHUB_TOKEN") or secret("GITHUB_TOKEN"))
+        gh.hold = self.hold_reason
+        return gh
+
+    def hold_reason(self) -> str:
+        """Why the owner put the agent on hold, or "". While held, nothing is written to GitHub."""
+        h = read_json(self.s.state_dir / "hold.json", None)
+        return f"the agent is on hold since {h.get('at', '?')} ({h.get('why', 'no reason given')}); lift it with `pr-agent hold off`" if h else ""
+
+    def set_hold(self, on: bool, why: str) -> dict[str, Any]:
+        path = self.s.state_dir / "hold.json"
+        if on:
+            write_json(path, {"why": why[:200], "at": datetime.now(timezone.utc).isoformat(timespec="seconds")})
+        else:
+            path.unlink(missing_ok=True)
+        self.ledger.log("hold", "agent", "put on hold" if on else "hold lifted", why[:200], "state/hold.json", "held" if on else "running")
+        return {"held": on, "why": why}
+
+    def busy(self, kind: str) -> str:
+        """Skip a scheduled pre-step while the owner holds the agent or another run is still going."""
+        if why := self.hold_reason():
+            self.ledger.log("hold", kind, f"skipped {kind}", why, "state/hold.json", "skipped")
+            return why
+        if live := runnow.run_in_progress(self.ledger.rows(), datetime.now(timezone.utc)):
+            self.ledger.log("lock", kind, f"skipped {kind}", f"run {live} is still going; one run at a time", "decisions.tsv", "skipped")
+            return live
+        return ""
 
     def index(self) -> DevIndex:
         bank = self.s.query_bank
@@ -201,6 +227,8 @@ class App:
         return f"Scripts you wrote under {home} were set aside ({names}). Never write or run your own code against GitHub or with {home}/bin/python; mention this in the summary."
 
     def prestep_run(self) -> dict[str, Any]:
+        if self.busy("run"):
+            return {"wakeAgent": False}
         g = self.guard()
         if g.over:
             self.run_start("skipped")
@@ -230,6 +258,8 @@ class App:
         return {k: v for k, v in items.items() if v}
 
     def prestep_follow_up(self) -> dict[str, Any]:
+        if self.busy("follow-up"):
+            return {"wakeAgent": False}
         g = self.guard()
         if g.over:
             return {"wakeAgent": False}
@@ -253,6 +283,11 @@ def build_parser() -> argparse.ArgumentParser:
 
     rn = sub.add_parser("run-now", help="start the scheduled run early (owner asked on Telegram); refuses near a scheduled run")
     rn.add_argument("--why", required=True)
+    rn.add_argument("--follow-up", action="store_true", help="start the follow-up job (review comments, claim replies) instead of the main run")
+
+    hd = sub.add_parser("hold", help="stop all GitHub writes, scheduled runs and follow-ups until lifted (owner's switch)")
+    hd.add_argument("state", choices=["on", "off", "status"])
+    hd.add_argument("--why", default="")
 
     rs = sub.add_parser("run-start")
     rs.add_argument("--label", default="manual")
@@ -382,6 +417,10 @@ def main(argv: list[str] | None = None) -> int:
     except Refused as why:
         out({"refused": str(why)})
         return 3
+    except Held as why:
+        app.ledger.log("hold", getattr(args, "issue_id", None) or args.cmd, "refused a GitHub write", str(why)[:200], "state/hold.json", "held")
+        out({"refused": f"{why}. Stop all GitHub work now and finish with the run summary."})
+        return 3
     except MissingSecret as why:
         print(str(why), file=sys.stderr)
         return 2
@@ -429,7 +468,15 @@ def dispatch(app: App, a: argparse.Namespace) -> int:  # noqa: C901 - flat comma
     elif a.cmd == "workspace":
         return workspace_cmd(app, a)
     elif a.cmd == "run-now":
-        out(run_now(app, a.why))
+        out(run_now(app, a.why, follow_up=a.follow_up))
+        return 0
+    elif a.cmd == "hold":
+        if a.state == "status":
+            out({"held": bool(app.hold_reason()), "why": app.hold_reason()})
+        else:
+            if not a.why:
+                raise SystemExit("--why is required")
+            out(app.set_hold(a.state == "on", a.why))
         return 0
     elif a.cmd == "selfcheck":
         res = isolation_selfcheck(app.s.state_dir, app.s.workspaces_dir)
@@ -500,12 +547,15 @@ def dispatch(app: App, a: argparse.Namespace) -> int:  # noqa: C901 - flat comma
     return 0
 
 
-def run_now(app: App, why: str, now: datetime | None = None) -> dict[str, Any]:
+def run_now(app: App, why: str, now: datetime | None = None, follow_up: bool = False) -> dict[str, Any]:
     now = now or datetime.now(timezone.utc)
     hermes_home = Path(os.environ.get("HERMES_HOME", Path.home() / ".hermes"))
-    job = runnow.find_job(hermes_home / "cron" / "jobs.json", "pr-agent-run")
+    name = "pr-agent-follow-up" if follow_up else "pr-agent-run"
+    job = runnow.find_job(hermes_home / "cron" / "jobs.json", name)
     if not job:
-        return {"started": False, "reason": "the pr-agent-run job isn't registered"}
+        return {"started": False, "reason": f"the {name} job isn't registered"}
+    if held := app.hold_reason():
+        return {"started": False, "reason": held}
     busy = runnow.run_in_progress(app.ledger.rows(), now)
     if busy or runnow.cron_process_running():
         return {"started": False, "reason": f"a run is already in progress ({busy or 'cron job running'})"}
@@ -516,7 +566,7 @@ def run_now(app: App, why: str, now: datetime | None = None) -> dict[str, Any]:
     if g.over:
         return {"started": False, "reason": f"usage guard: {g.over}"}
     runnow.start(job["id"], app.s.home / "run-now.log")
-    app.ledger.log("chat.run", "pr-agent-run", "started a run early", why[:200], "telegram", "started")
+    app.ledger.log("chat.run", name, f"started the {'follow-up' if follow_up else 'run'} early", why[:200], "telegram", "started")
     return {"started": True, "next_scheduled": f"{nxt:%H:%M} UTC" if nxt else "unknown", "note": "the summary arrives on Telegram when the run ends"}
 
 
