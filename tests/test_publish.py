@@ -321,3 +321,26 @@ def test_balanced_markup_is_fine():
     assert not leaves_open(ok)
     # Inside an HTML block GitHub renders fence lines as raw text, so any raw HTML counts.
     assert leaves_open("<div>\n```\n<details>\n```\n</div>\n")
+
+
+def test_pr_updates_keep_the_finding_and_the_review_summary(gh, fake, tmp_path):
+    # 2026-10-04: CodeRabbit's inline comment opened with its script logs; cut at 800 characters
+    # nothing of the finding was left, and the request itself sat in the review summary.
+    from pr_agent.publish import pr_updates
+    reg = Registry(tmp_path)
+    reg.save_pr("o/r#42", {"repo": "o/r", "number": 42, "url": "https://github.com/o/r/pull/42", "state": "open"})
+    logs = "<details><summary>🧩 Analysis chain</summary>\n\n" + "rg output line\n" * 300 + "</details>"
+    fake.add("GET", "/user", {"login": "bot"})
+    fake.add("GET", "/repos/o/r/pulls/42", {"state": "open"})
+    fake.add("GET", "/repos/o/r/pulls/42/reviews?per_page=100", [
+        {"id": 7, "user": {"login": "coderabbitai[bot]"}, "state": "CHANGES_REQUESTED", "body": "Prompt to fix: return the token within a bounded cooldown <!-- internal -->"},
+        {"id": 8, "user": {"login": "maint"}, "state": "APPROVED", "body": ""}])
+    fake.add("GET", "/repos/o/r/pulls/42/comments?per_page=100", [
+        {"id": 9, "pull_request_review_id": 7, "user": {"login": "coderabbitai[bot]"}, "path": "a.ts", "line": 3, "html_url": "u", "body": logs + "\n\n**Retry backoff per submission.** Use a cooldown."}])
+    fake.add("GET", "/repos/o/r/issues/42/comments?per_page=100", [])
+
+    new = pr_updates(gh, reg)[0]["new_comments"]
+
+    summary, inline = new
+    assert summary["kind"] == "review_summary" and "bounded cooldown" in summary["body"] and "internal" not in summary["body"]
+    assert inline["review_id"] == 7 and "Use a cooldown" in inline["body"] and "rg output" not in inline["body"]
