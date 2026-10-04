@@ -46,5 +46,7 @@ nemohermes "$SANDBOX" gateway restart || { sleep 15; nemohermes "$SANDBOX" statu
 
 say "Smoke test inside the sandbox"
 nemohermes "$SANDBOX" exec -- "$SANDBOX_REPO/bin/pr-agent" guard
+# Repo code must not reach the agent's state, keys or code; this fails the deploy if it can.
+nemohermes "$SANDBOX" exec -- "$SANDBOX_REPO/bin/pr-agent" selfcheck
 nemohermes "$SANDBOX" exec -- "$SANDBOX_REPO/bin/pr-agent" policy huggingface/transformers
 say "Deployed. Trigger a run now with: scripts/run-now.sh"

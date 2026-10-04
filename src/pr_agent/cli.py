@@ -24,7 +24,8 @@ from .state import CreditBook, SeenStore, read_json, write_json
 from .spend import append_tokens, snapshot as spend_snapshot
 from .summary import compact_candidates, daily_digest, run_summary
 from .usage import menu, report, router_models
-from .workspace import Meta, diff_text, prepare, run_tests, setup_env
+from .jail import IsolationUnavailable
+from .workspace import Meta, diff_text, isolation_selfcheck, prepare, run, run_tests, setup_env
 
 
 def out(data: Any) -> None:
@@ -236,6 +237,12 @@ def build_parser() -> argparse.ArgumentParser:
     wt.add_argument("path")
     wt.add_argument("--cmd", default="")
     wt.add_argument("--label", default="after", help="baseline, repro, after")
+    we = wsub.add_parser("exec", help="run any repo code (repro script, linter, pre-commit) inside the jail")
+    we.add_argument("path")
+    we.add_argument("command", nargs=argparse.REMAINDER, help="-- then the command")
+    we.add_argument("--timeout", type=int, default=900)
+
+    sub.add_parser("selfcheck", help="prove repo code is isolated from the agent's state and keys")
 
     gate = sub.add_parser("gate", help="record the self-review gate verdict for the current diff")
     gate.add_argument("path")
@@ -324,6 +331,9 @@ def main(argv: list[str] | None = None) -> int:
     except MissingSecret as why:
         print(str(why), file=sys.stderr)
         return 2
+    except IsolationUnavailable as why:
+        print(f"refusing to run repo code: {why}", file=sys.stderr)
+        return 4
 
 
 def dispatch(app: App, a: argparse.Namespace) -> int:  # noqa: C901 - flat command table
@@ -364,6 +374,10 @@ def dispatch(app: App, a: argparse.Namespace) -> int:  # noqa: C901 - flat comma
         out(app.ledger.log(a.phase, a.subject, a.decision, a.why, a.evidence, a.result))
     elif a.cmd == "workspace":
         return workspace_cmd(app, a)
+    elif a.cmd == "selfcheck":
+        res = isolation_selfcheck(app.s.state_dir, app.s.workspaces_dir)
+        out(res)
+        return 0 if res["isolated"] else 1
     elif a.cmd == "gate":
         meta = Meta.load(Path(a.path))
         findings = Path(a.findings_file).read_text()
@@ -451,8 +465,20 @@ def workspace_cmd(app: App, a: argparse.Namespace) -> int:
         out(res)
     elif a.wcmd == "diff":
         print(diff_text(ws, meta.base_sha))
+    elif a.wcmd == "exec":
+        cmd = a.command[1:] if a.command[:1] == ["--"] else a.command
+        if not cmd:
+            raise SystemExit("usage: pr-agent workspace exec <ws> -- <command> [args...]")
+        try:
+            proc = run(cmd, cwd=ws, timeout=a.timeout, jail=ws)
+        except subprocess.TimeoutExpired:
+            print(f"timed out after {a.timeout}s", file=sys.stderr)
+            return 124
+        sys.stdout.write(proc.stdout)
+        sys.stderr.write(proc.stderr)
+        return proc.returncode
     else:
-        out(meta.__dict__)
+        out(meta.__dict__ | {"gate": read_json(meta.gate_path, None)})
     return 0
 
 

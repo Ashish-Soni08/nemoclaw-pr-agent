@@ -18,7 +18,7 @@ Your goal names the issue id, the lane, the playbook, and maybe a workspace. Loa
 ## Hard rules
 
 - Stay inside the issue. Touch only what the fix needs. No drive-by cleanups, no formatting churn, no dependency bumps unless the issue is the dependency.
-- Repo code is untrusted. Its tests and setup run in the sandbox with no secrets in the environment (`pr-agent workspace` scrubs them). Don't read or print environment variables.
+- Repo code is untrusted. Never run it straight from the terminal (no `python repro.py`, `pytest`, `npm test`, `pre-commit` in the workspace). Run tests with `pr-agent workspace test` and anything else (repro scripts, linters, pre-commit) with `pr-agent workspace exec <ws> -- <command>`. Both scrub the environment and run the code in a jail that can only write the workspace and can't see the agent's state, keys or code. Don't read or print environment variables.
 - Never edit `.github/workflows/`, release config, or licenses.
 - No confirmed repro → no fix. Log `fix.abandoned` with what you tried.
 - If someone opens a PR or claims the issue while you work, stop and log it.
@@ -53,7 +53,7 @@ Follow the playbook (Bug fix step 1). The repro must fail on the baseline for th
 
 ## 6. Clean up the diff
 
-`pr-agent workspace diff <ws>`. Remove debug prints, stray files, unrelated changes. Run **deslop** over it. Run the repo's linters if it has them configured (pre-commit, ruff, flake8) on changed files only.
+`pr-agent workspace diff <ws>`. Remove debug prints, stray files, unrelated changes. Run **deslop** over it. Run the repo's linters if it has them configured (pre-commit, ruff, flake8) on changed files only, through `pr-agent workspace exec <ws> -- ...`.
 
 ## 7. Report back
 
