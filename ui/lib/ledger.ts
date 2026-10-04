@@ -39,11 +39,36 @@ export type TokenRow = {
 // run_config.tsv: the settings each run started with, one key per row. Also proposed.
 export type ConfigRow = { run: string; key: string; value: string };
 
+// host.tsv: one VM sample a minute from a host-side sampler; empty cells when a number isn't available.
+export type HostRow = {
+  ts: string;
+  run: string;
+  cpu_pct: number | null;
+  load1: number | null;
+  ram_used_gb: number | null;
+  ram_total_gb: number | null;
+  gpu_util_pct: number | null;
+  vram_used_gb: number | null;
+  vram_total_gb: number | null;
+  disk_used_gb: number | null;
+  disk_total_gb: number | null;
+  agent_cpu_cores: number | null;
+  agent_ram_gb: number | null;
+  agent_vram_gb: number | null;
+  agent_disk_gb: number | null;
+};
+
+const HOST_NUMBERS = [
+  "cpu_pct", "load1", "ram_used_gb", "ram_total_gb", "gpu_util_pct", "vram_used_gb", "vram_total_gb",
+  "disk_used_gb", "disk_total_gb", "agent_cpu_cores", "agent_ram_gb", "agent_vram_gb", "agent_disk_gb",
+] as const;
+
 export type Ledger = {
   decisions: Decision[];
   spend: Spend[];
   tokens: TokenRow[];
   config: ConfigRow[];
+  host: HostRow[];
   origin: { kind: "dataset"; dataset: string } | { kind: "sample" };
   fetchedAt: string;
 };
@@ -103,6 +128,14 @@ function toTokens(text: string): TokenRow[] {
   }));
 }
 
+function toHost(text: string): HostRow[] {
+  return parseTsv(text).map((r) => ({
+    ts: r.ts,
+    run: unquote(r.run) || "-",
+    ...(Object.fromEntries(HOST_NUMBERS.map((k) => [k, num(r[k] ?? "")])) as Record<(typeof HOST_NUMBERS)[number], number | null>),
+  }));
+}
+
 // A 404 on these means a wrong dataset name or a token that can't see it, not an empty
 // ledger, so it fails the render and the last good page stays up.
 const REQUIRED = new Set(["decisions.tsv", "spend.tsv"]);
@@ -127,12 +160,13 @@ async function fromSample(file: string): Promise<string> {
 export async function loadLedger(): Promise<Ledger> {
   const dataset = process.env.LEDGER_DATASET?.replace(/^datasets\//, "").replace(/\/+$/, "");
   const read = dataset ? (f: string) => fromDataset(dataset, f) : fromSample;
-  const [d, s, t, c] = await Promise.all(["decisions.tsv", "spend.tsv", "tokens.tsv", "run_config.tsv"].map(read));
+  const [d, s, t, c, h] = await Promise.all(["decisions.tsv", "spend.tsv", "tokens.tsv", "run_config.tsv", "host.tsv"].map(read));
   return {
     decisions: toDecisions(d),
     spend: toSpend(s),
     tokens: toTokens(t),
     config: parseTsv(c).map((r) => ({ run: r.run, key: r.key, value: unquote(r.value) })),
+    host: toHost(h),
     origin: dataset ? { kind: "dataset", dataset } : { kind: "sample" },
     fetchedAt: new Date().toISOString(),
   };
