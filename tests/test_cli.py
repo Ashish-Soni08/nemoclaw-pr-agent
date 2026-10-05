@@ -259,3 +259,13 @@ def test_claim_cannot_be_marked_approved_once_its_pr_is_open(home, monkeypatch):
     with pytest.raises(SystemExit, match="maintainer said yes"):
         main(["claim", "set", "acme/lib#7", "approved", "--why", "PR opened"])
     assert reg.claims()["issue:acme/lib#7"]["status"] == "build"
+
+
+def test_a_pinned_repo_requires_a_claim_even_without_a_written_rule(home, monkeypatch):
+    from pr_agent import policy as policy_mod
+    from pr_agent.cli import App
+    app = App()
+    app.s.query_bank["pinned"] = [{"repo": "kestra-io/kestra", "claim_required": True}]
+    monkeypatch.setattr(policy_mod, "check", lambda gh, repo, cache: policy_mod.PolicyVerdict(repo, "unclear", False, []))
+    assert app.policy("Kestra-io/Kestra", None).claim_required is True
+    assert app.policy("acme/lib", None).claim_required is False

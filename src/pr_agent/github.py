@@ -82,10 +82,11 @@ class GitHub:
         data = resp.json()
         return [item["path"] for item in data] if isinstance(data, list) else []
 
-    def search_issues(self, q: str, per_page: int = 50) -> list[dict[str, Any]]:
+    def search_issues(self, q: str, per_page: int = 50, sort: str = "") -> list[dict[str, Any]]:
         from urllib.parse import quote
 
-        return self.client.get_json(f"/search/issues?q={quote(q)}&per_page={per_page}").get("items", [])
+        order = f"&sort={sort}&order=desc" if sort else ""
+        return self.client.get_json(f"/search/issues?q={quote(q)}&per_page={per_page}{order}").get("items", [])
 
     def pr_review_comments(self, full: str, number: int) -> list[dict[str, Any]]:
         return self.client.get_json(f"/repos/{full}/pulls/{number}/comments?per_page=100")
