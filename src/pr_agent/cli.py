@@ -97,7 +97,13 @@ class App:
             res = index.search(body)
             v = policy_mod.apply_maintainer_stance(v, res.hits, cache)
             v.maintainer_evidence = v.maintainer_evidence or "searched, none found"
+        if (pin := self.pin(repo)) and pin.get("claim_required"):
+            # The owner's track rules say: ask to be assigned and wait for it.
+            v.claim_required = True
         return v
+
+    def pin(self, repo: str) -> dict[str, Any] | None:
+        return next((p for p in self.s.query_bank.get("pinned") or [] if p["repo"].lower() == repo.lower()), None)
 
     def guard(self) -> Any:
         u = self.s.agent.get("usage", {})
@@ -174,6 +180,8 @@ class App:
             v = self.policy(c["repo"], gh, index)
             c["policy"] = v.verdict
             c["claim_required"] = v.claim_required
+            if pin := self.pin(c["repo"]):
+                c["track"] = pin.get("rules", "")
             if v.claim_required:
                 c["lane_hint"] = "ask-first"
             self.ledger.log("policy", c["repo"], f"AI policy {v.verdict}", "; ".join(v.matches[:2]) or "no AI policy text found", ", ".join(v.files[:4]) or "-", v.verdict)

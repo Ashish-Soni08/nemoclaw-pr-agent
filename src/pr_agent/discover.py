@@ -72,6 +72,7 @@ class DiscoveryRun:
 
     def run(self) -> dict[str, Any]:
         plan = plan_queries(self.bank, self.rotation_path)
+        self._pinned()
         self._search(plan)
         survivors = self._verify()
         candidates = self._precedent(survivors)
@@ -94,6 +95,23 @@ class DiscoveryRun:
             f"credits run {self.index.spent_this_run}, month {self.summary['credits_month']}",
         )
         return self.summary
+
+    def _pinned(self) -> None:
+        """Repos the owner named (query bank `pinned`): their open, unassigned issues with the given
+        label come straight from GitHub, ahead of the Index search, and go through the same checks."""
+        for pin in self.bank.get("pinned") or []:
+            repo, label = pin["repo"], pin.get("label", "good first issue")
+            q = f'repo:{repo} is:issue is:open no:assignee label:"{label}"'
+            try:
+                found = self.gh.search_issues(q, per_page=pin.get("max_issues", 5))
+            except HttpError as err:
+                self.ledger.log("discover.pinned", repo, "pinned search failed", str(err)[:120], q, "error")
+                continue
+            for issue in found:
+                hid = f"issue:{repo}#{issue['number']}"
+                hit = {"id": hid, "url": issue["html_url"], "title": issue["title"], "passages": [{"text": (issue.get("body") or "")[:1200]}]}
+                self.hits.setdefault(hid, {"hit": hit, "query": q, "topic": f"pinned:{repo}", "repo": repo, "number": issue["number"], "pinned": True})
+            self.ledger.log("discover.pinned", repo, f"{len(found)} open {label} issues", pin.get("why", "pinned by the owner"), q, f"{len(found)} hits")
 
     def _search(self, plan: Plan) -> None:
         reserve = self.bank.get("precedent_reserve_credits", 10)
@@ -142,7 +160,8 @@ class DiscoveryRun:
                 break
             checked += 1
             try:
-                v = verify_hit(self.gh, item["repo"], item["number"], cfg)
+                # A pinned repo was chosen by the owner, so the star window doesn't apply.
+                v = verify_hit(self.gh, item["repo"], item["number"], {**cfg, "min_stars": 0, "max_stars": 10**9} if item.get("pinned") else cfg)
             except HttpError as err:
                 self.ledger.log("discover.verify", hid, "dropped: GitHub error", str(err)[:120], item["hit"].get("url", ""), "dropped")
                 continue
@@ -193,6 +212,7 @@ class DiscoveryRun:
                     "number": item["number"],
                     "title": issue["title"],
                     "found_by": {"query": item["query"], "topic": item["topic"]},
+                    "pinned": bool(item.get("pinned")),
                     "passages": [p.get("text", "")[:1200] for p in item["hit"].get("passages", [])],
                     "github": {
                         "labels": [l["name"] for l in issue.get("labels", [])],

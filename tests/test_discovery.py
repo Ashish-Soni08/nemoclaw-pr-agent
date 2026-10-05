@@ -179,3 +179,23 @@ def test_lane_hint_builds_directly_unless_the_issue_is_unsettled():
     assert lane_hint({"labels": [{"name": "bug"}, {"name": "documentation"}]}) == "go-directly"
     assert lane_hint({"labels": [{"name": "Needs-Triage"}]}) == "ask-first"
     assert lane_hint({"labels": [{"name": "RFC"}]}) == "ask-first"
+
+
+def test_pinned_repo_issues_come_first_and_skip_the_star_window(tmp_path):
+    k = "kestra-io/kestra"
+    routes = [
+        ("GET", "/search/issues*", {"items": [{"number": 11, "title": "Fix toggle label", "html_url": f"https://github.com/{k}/issues/11", "body": "The UI toggle says Off when on"}]}),
+        ("GET", f"/repos/{k}", repo_json(k) | {"stargazers_count": 90000}),
+        ("GET", f"/repos/{k}/issues/11", issue_json(k, 11, labels=[{"name": "good first issue"}])),
+        ("GET", f"/repos/{k}/issues/11/timeline*", []),
+    ]
+    bank = BANK | {"pinned": [{"repo": k, "label": "good first issue", "max_issues": 5, "claim_required": True}]}
+    run, fi, fg, ledger, seen = build(tmp_path, [[], []], {"routes": routes, "precedent": {}})
+    run.bank = bank
+    run.run()
+    cands = [json.loads(l) for l in (tmp_path / "run" / "candidates.jsonl").read_text().splitlines()]
+    assert [c["issue_id"] for c in cands] == [f"issue:{k}#11"]
+    assert cands[0]["pinned"] is True
+    q = [u for m, u, b in fg.calls if "/search/issues" in u][0]
+    assert "no%3Aassignee" in q and "good%20first%20issue" in q
+    assert any(r["phase"] == "discover.pinned" for r in ledger.rows())

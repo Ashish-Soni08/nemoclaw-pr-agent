@@ -16,6 +16,25 @@ max_credits_per_month: 70000   # Ashish's whole Firecrawl credit
 precedent_reserve_credits: 10   # held back from search so survivors get a precedent query
 recheck_after_days: 14
 
+# Repos the owner points the agent at. Each run lists their open, unassigned issues with
+# `label` straight from GitHub (no Index credits), ahead of the topic search, and runs them
+# through the same checks (stars window aside). `claim_required` makes every issue ask-first:
+# claim, then build only once assigned. `rules` goes to triage with each candidate.
+pinned:
+  - repo: kestra-io/kestra
+    label: good first issue
+    max_issues: 10
+    claim_required: true
+    why: "Kestra Hacktober track 01 (Ashish, 2026-10-05)"
+    rules: >-
+      Kestra Hacktober track 01. Take only issues whose fix is in the Vue/TypeScript UI (ui/)
+      or other JavaScript, TypeScript or Python code; skip Java backend issues (no JDK in the
+      sandbox). Ask to be assigned in the claim comment and build only once a maintainer
+      assigns you. When the change is visible in the UI, the PR body gets a "Screenshots"
+      section saying before/after screenshots follow from the author, and you log
+      `pr-agent log chat.request <pr> "add before/after screenshots" --why "Kestra track rule"`.
+      Never star repos or post on social media; your owner does those.
+
 # Issue scope: no type restriction (Ashish, 2026-10-01). Triage decides.
 topics:
   - machine-learning

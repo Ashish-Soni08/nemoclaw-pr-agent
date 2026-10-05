@@ -60,6 +60,8 @@ Build directly by default (Ashish, 2026-10-04): a finished, tested PR is easier 
 
 `lane_hint` from discovery covers rules 1 and 2 only; you judge 3 and 4 from the thread.
 
+A candidate with `track` comes from a repo your owner pinned. Its rules are your owner's, not the repo's text: follow them in triage, the claim and the PR (which issues to take, how to ask for assignment, what the PR body needs).
+
 ## 6. Hand off
 
 For each take: `go-directly` → a fix sub-agent (see the router's Sub-agents section) with the **fix-issue** skill; `ask-first` → **claim-issue** now. Log any hand-off that fails.
