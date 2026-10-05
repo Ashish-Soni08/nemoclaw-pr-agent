@@ -199,3 +199,12 @@ def test_pinned_repo_issues_come_first_and_skip_the_star_window(tmp_path):
     q = [u for m, u, b in fg.calls if "/search/issues" in u][0]
     assert "no%3Aassignee" in q and "good%20first%20issue" in q
     assert any(r["phase"] == "discover.pinned" for r in ledger.rows())
+
+
+def test_pinned_repo_without_a_label_takes_recent_unassigned_issues(tmp_path):
+    routes = [("GET", "/search/issues*", {"items": []})]
+    run, fi, fg, ledger, seen = build(tmp_path, [[], []], {"routes": routes, "precedent": {}})
+    run.bank = BANK | {"pinned": [{"repo": "openclaw/openclaw", "max_issues": 10}]}
+    run.run()
+    q = [u for m, u, b in fg.calls if "/search/issues" in u][0]
+    assert "label" not in q and "sort=updated" in q and "per_page=10" in q

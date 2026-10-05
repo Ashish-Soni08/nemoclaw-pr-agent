@@ -16,9 +16,9 @@ max_credits_per_month: 70000   # Ashish's whole Firecrawl credit
 precedent_reserve_credits: 10   # held back from search so survivors get a precedent query
 recheck_after_days: 14
 
-# Repos the owner points the agent at. Each run lists their open, unassigned issues with
-# `label` straight from GitHub (no Index credits), ahead of the topic search, and runs them
-# through the same checks (stars window aside). `claim_required` makes every issue ask-first:
+# Repos the owner points the agent at. Each run lists their open, unassigned issues (with
+# `label` if set, most recently updated first) straight from GitHub (no Index credits),
+# ahead of the topic search, and runs them through the same checks (stars window aside). `claim_required` makes every issue ask-first:
 # claim, then build only once assigned. `rules` goes to triage with each candidate.
 pinned:
   - repo: kestra-io/kestra
@@ -34,6 +34,15 @@ pinned:
       section saying before/after screenshots follow from the author, and you log
       `pr-agent log chat.request <pr> "add before/after screenshots" --why "Kestra track rule"`.
       Never star repos or post on social media; your owner does those.
+
+  # The runtime this agent runs on, and the OpenClaw assistant (Ashish, 2026-10-05). Normal
+  # build-first lanes; their own AI policy and CONTRIBUTING still decide.
+  - repo: NousResearch/hermes-agent
+    max_issues: 10
+    why: "Hermes, the agent runtime this agent runs on (Ashish, 2026-10-05)"
+  - repo: openclaw/openclaw
+    max_issues: 10
+    why: "OpenClaw (Ashish, 2026-10-05)"
 
 # Issue scope: no type restriction (Ashish, 2026-10-01). Triage decides.
 topics:
