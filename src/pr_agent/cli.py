@@ -19,7 +19,7 @@ from .devindex import DevIndex
 from .discover import DiscoveryRun
 from .github import GitHub, Held
 from .ledger import Ledger, append_tsv, sync_to_dataset
-from .publish import Refused, Registry, ack_comments, check_changes, claim_updates, current_parent, gated_tree, open_pr, post_claim, pr_updates, record_gate, signoff_for
+from .publish import Refused, Registry, ack_comments, check_changes, claim_updates, current_parent, gated_tree, objected, open_pr, post_claim, pr_updates, record_gate, signoff_for
 from .state import CreditBook, SeenStore, read_json, write_json
 from .spend import append as append_spend, append_tokens, huggingface_billed, snapshot as spend_snapshot
 from .summary import compact_candidates, daily_digest, run_summary
@@ -270,9 +270,17 @@ class App:
         """Build directly unless the repo requires a yes (Ashish, 2026-10-09): an unanswered claim in
         a repo whose written rules don't ask for one moves to build, so the agent fixes it."""
         for c in claims:
+            rec = self.registry.claims()[c["issue_id"]]
+            if objected(c.get("reactions") or []):
+                # Someone frowned at our plan: that's not "nobody answered". Back to waiting; the
+                # model reads it like a reply.
+                if rec.get("status") == "build":
+                    self.registry.save_claim(c["issue_id"], {"status": "waiting"})
+                    who = ", ".join(f"{r['author']} {r['content']}" for r in c["reactions"])
+                    Ledger(self.ledger.path, "").log("claim.status", c["issue_id"], "claim waiting", f"reaction on our plan ({who}); build-directly no longer applies", rec.get("comment_url", ""), "waiting")
+                continue
             if c["state"] not in ("waiting", "expired") or c["replies"] or c["assignees"]:
                 continue
-            rec = self.registry.claims()[c["issue_id"]]
             if self.policy(rec["repo"], gh).claim_required:
                 continue
             self.registry.save_claim(c["issue_id"], {"status": "build"})

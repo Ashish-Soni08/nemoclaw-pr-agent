@@ -288,3 +288,20 @@ def test_unanswered_claims_build_unless_the_repo_requires_a_yes(home, monkeypatc
     assert [c["state"] for c in out] == ["build", "waiting", "waiting"]
     assert app.registry.claims()["issue:nous/hermes#1"]["status"] == "build"
     assert app.registry.claims()["issue:kubeflow/pipelines#2"]["status"] == "waiting"
+
+
+def test_a_thumbs_down_on_the_plan_stops_build_directly(home, monkeypatch):
+    from pr_agent import policy as policy_mod
+    from pr_agent.cli import App
+    app = App()
+    monkeypatch.setattr(policy_mod, "check", lambda gh, repo, cache: policy_mod.PolicyVerdict(repo, "unclear", False, []))
+    app.registry.save_claim("issue:plotly/plotly.js#8076", {"repo": "plotly/plotly.js", "status": "build", "comment_url": "u"})
+    app.registry.save_claim("issue:nous/hermes#1", {"repo": "nous/hermes", "status": "waiting", "comment_url": "u"})
+    frown = [{"author": "camdecoster", "content": "-1"}]
+    claims = [
+        {"issue_id": "issue:plotly/plotly.js#8076", "state": "waiting", "replies": [], "reactions": frown, "assignees": []},
+        {"issue_id": "issue:nous/hermes#1", "state": "waiting", "replies": [], "reactions": [{"author": "x", "content": "+1"}], "assignees": []},
+    ]
+    out = app._build_unanswered(None, claims)
+    assert [c["state"] for c in out] == ["waiting", "build"]
+    assert app.registry.claims()["issue:plotly/plotly.js#8076"]["status"] == "waiting"

@@ -406,3 +406,16 @@ def test_no_signoff_by_default(ws, tmp_path, gh, fake):
     open_pr(gh, ws, ALLOW, Registry(tmp_path), Ledger(tmp_path / "d.tsv", "r1"), LIMITS, "fix(pkg): add numbers", BODY, "")
     commit = fake.called("POST", "/git/commits")[0]
     assert "author" not in commit and "Signed-off-by" not in commit["message"]
+
+
+def test_claim_updates_report_reactions_and_a_frown_stops_build(gh, fake, tmp_path):
+    from conftest import issue_json
+    from pr_agent.publish import claim_updates
+    fake.add("GET", "/user", {"login": "agent"})
+    fake.add("GET", "/repos/o/r/issues/7", issue_json("o/r", 7, created_at="2026-01-01T00:00:00Z"))
+    fake.add("GET", "/repos/o/r/issues/7/comments*", [])
+    fake.add("GET", "/repos/o/r/issues/comments/1/reactions*", [{"user": {"login": "maint"}, "content": "-1"}, {"user": {"login": "agent"}, "content": "+1"}])
+    reg = Registry(tmp_path)
+    reg.save_claim("issue:o/r#7", {"repo": "o/r", "number": 7, "comment_id": 1, "claimed_at": "2026-01-01T00:00:00+00:00", "status": "build"})
+    (c,) = claim_updates(gh, reg)
+    assert c["state"] == "waiting" and c["reactions"] == [{"author": "maint", "content": "-1"}]
