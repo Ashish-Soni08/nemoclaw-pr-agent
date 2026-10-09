@@ -271,10 +271,10 @@ def test_a_pinned_repo_requires_a_claim_even_without_a_written_rule(home, monkey
     assert app.policy("acme/lib", None).claim_required is False
 
 
-def test_kestra_builds_directly_and_competes(home):
+def test_kestra_asks_first_and_is_watched(home):
     from pr_agent.cli import App
     pin = App().pin("kestra-io/kestra")
-    assert pin["compete"] is True and not pin.get("claim_required")
+    assert pin["claim_required"] is True and pin["watch"] is True and not pin.get("compete")
 
 
 def test_unanswered_claims_build_unless_the_repo_requires_a_yes(home, monkeypatch):
@@ -316,3 +316,25 @@ def test_a_thumbs_down_on_the_plan_stops_build_directly(home, monkeypatch):
 def test_kestra_allows_three_open_prs(home):
     from pr_agent.cli import App
     assert App().pin("kestra-io/kestra")["max_open_prs"] == 3
+
+
+def test_watch_lists_new_unclaimed_issues_once(home):
+    from conftest import issue_json, repo_json
+    from fakes import FakeTransport, client
+    from pr_agent.cli import App
+    from pr_agent.github import GitHub
+    from pr_agent.state import SeenStore
+    fake = FakeTransport()
+    gh = GitHub(client("https://api.github.com", fake), sleep=lambda s: None)
+    a = "kestra-io/kestra"
+    fake.add("GET", "/search/issues*", {"items": [issue_json(a, 1), issue_json(a, 2), issue_json(a, 3)]})
+    fake.add("GET", f"/repos/{a}", repo_json(a))
+    fake.add("GET", f"/repos/{a}/issues/1", issue_json(a, 1))
+    fake.add("GET", f"/repos/{a}/issues/1/timeline*", [])
+    fake.add("GET", f"/repos/{a}/issues/2", issue_json(a, 2))
+    fake.add("GET", f"/repos/{a}/issues/2/timeline*", [{"event": "commented", "created_at": issue_json(a, 2)["updated_at"], "body": "I'd like to work on this", "user": {"login": "dev"}}])
+    app = App()
+    app.registry.save_claim(f"issue:{a}#3", {"repo": a, "status": "waiting"})
+    out = app._watch(gh, [{"repo": a, "label": "good first issue", "watch": True, "rules": "track"}])
+    assert [w["issue_id"] for w in out] == [f"issue:{a}#1"] and out[0]["track"] == "track"
+    assert SeenStore(app.s.state_dir / "seen.tsv").is_fresh_skip(f"issue:{a}#2")

@@ -24,22 +24,20 @@ pinned:
   - repo: kestra-io/kestra
     label: good first issue
     max_issues: 10
-    # Ashish, 2026-10-09: build without waiting for assignment, and compete on issues others
-    # claimed but haven't fixed; the maintainer picks which PR to merge.
-    compete: true
+    claim_required: true
+    # Ashish, 2026-10-09: Kestra asks contributors to wait for assignment, so respect it: every
+    # follow-up checks for new issues and asks to be assigned right away.
+    watch: true
     max_open_prs: 3               # Ashish, 2026-10-09: up to three open Kestra PRs at once
-    why: "Kestra Hacktober track 01 (Ashish, 2026-10-05; build-first since 2026-10-09)"
+    why: "Kestra Hacktober track 01 (Ashish, 2026-10-05)"
     rules: >-
       Kestra Hacktober track 01. Take only issues whose fix is in the Vue/TypeScript UI (ui/)
       or other JavaScript, TypeScript or Python code; skip Java backend issues (no JDK in the
-      sandbox). Build directly: don't post a claim or wait to be assigned (your owner's call,
-      2026-10-09). Issues assigned to, claimed by or with an open PR from someone else are fair
-      game (`taken_by` lists who): build your own fix anyway, and in the PR body's Why section
-      say plainly that <who> is also on it and you're offering another option for the
-      maintainer to choose from; never criticise their work. Skip an issue only if its fix is
-      already merged. When the change is visible in the UI, the PR body gets a "Screenshots"
-      section saying before/after screenshots follow from the author, and you log
-      `pr-agent log chat.request <pr> "add before/after screenshots" --why "Kestra track rule"`.
+      sandbox). Ask to be assigned in the claim comment and build only once a maintainer
+      assigns you. Ask fast: new issues get claimed within hours. Never take an issue someone
+      else is assigned to or has claimed. When the change is visible in the UI, the PR body gets
+      a "Screenshots" section saying before/after screenshots follow from the author, and you
+      log `pr-agent log chat.request <pr> "add before/after screenshots" --why "Kestra track rule"`.
       Never star repos or post on social media; your owner does those.
 
   # The runtime this agent runs on, and the OpenClaw assistant (Ashish, 2026-10-05). Normal
