@@ -419,3 +419,14 @@ def test_claim_updates_report_reactions_and_a_frown_stops_build(gh, fake, tmp_pa
     reg.save_claim("issue:o/r#7", {"repo": "o/r", "number": 7, "comment_id": 1, "claimed_at": "2026-01-01T00:00:00+00:00", "status": "build"})
     (c,) = claim_updates(gh, reg)
     assert c["state"] == "waiting" and c["reactions"] == [{"author": "maint", "content": "-1"}]
+
+
+def test_push_404_on_existing_ref_explains_the_workflow_scope(gh, fake):
+    from pr_agent.http import HttpError
+    fake.add("GET", "/repos/bot/r/git/commits/p1", {"tree": {"sha": "t0"}})
+    fake.add("POST", "/repos/bot/r/git/blobs", {"sha": "b1"})
+    fake.add("POST", "/repos/bot/r/git/trees", {"sha": "t1"})
+    fake.add("POST", "/repos/bot/r/git/commits", {"sha": "c1"})
+    fake.add("GET", "/repos/bot/r/git/ref/heads/pr-agent/issue-7", {"object": {"sha": "old"}})
+    with pytest.raises(HttpError, match="Sync fork"):
+        gh.push_files("bot/r", "pr-agent/issue-7", "p1", {"a.md": b"x"}, "docs: x")

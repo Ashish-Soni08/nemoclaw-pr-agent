@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import subprocess
+import time
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -100,7 +101,18 @@ def cron_process_running() -> bool:
         return False
 
 
-def start(job_id: str, log: Path) -> None:
-    """Start the job detached, so it outlives the chat turn that asked for it."""
+REFUSED = ("not run again", "already being fired")
+
+
+def start(job_id: str, log: Path, wait_s: float = 3.0) -> str:
+    """Start the job detached, so it outlives the chat turn that asked for it. Returns why Hermes
+    refused to run it, or "". On 2026-10-09 it said "already being fired by the scheduler; not run
+    again" while we reported the run as started."""
     with log.open("w") as fh:
         subprocess.Popen(["hermes", "cron", "run", job_id], stdout=fh, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL, start_new_session=True)
+    time.sleep(wait_s)
+    try:
+        text = log.read_text(errors="replace")
+    except OSError:
+        return ""
+    return next((line.strip() for line in text.splitlines() if any(r in line for r in REFUSED)), "")

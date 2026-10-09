@@ -661,7 +661,9 @@ def run_now(app: App, why: str, now: datetime | None = None, follow_up: bool = F
     g = app.guard()
     if g.over:
         return {"started": False, "reason": f"usage guard: {g.over}"}
-    runnow.start(job["id"], app.s.home / "run-now.log")
+    if refused := runnow.start(job["id"], app.s.home / "run-now.log"):
+        app.ledger.log("chat.run", name, f"Hermes refused to start the {'follow-up' if follow_up else 'run'}", refused[:200], "run-now.log", "refused")
+        return {"started": False, "reason": f"Hermes refused: {refused[:200]}"}
     app.ledger.log("chat.run", name, f"started the {'follow-up' if follow_up else 'run'} early", why[:200], "telegram", "started")
     return {"started": True, "next_scheduled": f"{nxt:%H:%M} UTC" if nxt else "unknown", "note": "the summary arrives on Telegram when the run ends"}
 
