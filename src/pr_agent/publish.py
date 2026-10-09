@@ -323,6 +323,10 @@ def ack_comments(registry: Registry, key: str, ids: list[int]) -> None:
     registry.save_pr(key, {"seen_comment_ids": sorted(set(rec.get("seen_comment_ids", [])) | set(ids))})
 
 
+def objected(reactions: list[dict[str, Any]]) -> bool:
+    return any(r["content"] in ("-1", "confused") for r in reactions)
+
+
 def claim_updates(gh: GitHub, registry: Registry, expire_days: int = 7) -> list[dict[str, Any]]:
     """Maintainer replies on issues we asked for. The model judges the text; assignment counts as yes."""
     out = []
@@ -337,12 +341,19 @@ def claim_updates(gh: GitHub, registry: Registry, expire_days: int = 7) -> list[
             for c in gh.comments(claim["repo"], claim["number"], since=claim["claimed_at"])
             if c["id"] != claim["comment_id"] and c["user"]["login"] != me
         ]
+        # A thumbs-down on our plan is an answer too (plotly.js#8076, 2026-10-09): it was missed
+        # because only comments counted, and the claim moved to build.
+        reactions = [
+            {"author": r["user"]["login"], "content": r["content"]}
+            for r in gh.comment_reactions(claim["repo"], claim["comment_id"])
+            if r.get("user", {}).get("login") != me
+        ] if claim.get("comment_id") else []
         age = (utcnow() - datetime.fromisoformat(claim["claimed_at"])).days
         state = "assigned-to-us" if me in assignees else ("closed" if issue["state"] != "open" else ("expired" if age >= expire_days and not replies else "waiting"))
         if claim.get("status") == "build" and state in ("waiting", "expired"):
             # Someone else assigned or a maintainer replied: the model judges those as for any claim.
-            state = "taken" if assignees - {me} else "build"
-        out.append({"issue_id": issue_id, "state": state, "assignees": sorted(assignees), "replies": replies, "age_days": age})
+            state = "taken" if assignees - {me} else ("waiting" if objected(reactions) else "build")
+        out.append({"issue_id": issue_id, "state": state, "assignees": sorted(assignees), "replies": replies, "reactions": reactions, "age_days": age})
     return out
 
 

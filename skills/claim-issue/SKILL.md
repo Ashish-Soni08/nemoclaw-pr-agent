@@ -19,7 +19,7 @@ metadata:
 `pr-agent claim updates` (already in the follow-up context) shows each waiting claim with maintainer replies and assignment.
 
 - Assigned to you, or a maintainer (`association` OWNER, MEMBER or COLLABORATOR) clearly says go ahead → `pr-agent claim set <issue_id> approved --why "<quote>"`, then start a fix sub-agent with **fix-issue**.
-- A maintainer declines, asks to wait, or someone else takes it → `pr-agent claim set <issue_id> declined --why "<quote>"`. Don't reply unless they asked you something. If the no is about AI contributions in general (not just this issue), also run `pr-agent policy <owner/repo> --block --why "<quote>" --evidence <comment url>`.
+- A maintainer declines, asks to wait, or someone else takes it (a 👎 `-1` reaction from a maintainer on your plan comment, listed under `reactions`, is a decline too) → `pr-agent claim set <issue_id> declined --why "<quote>"`. Don't reply unless they asked you something. If the no is about AI contributions in general (not just this issue), also run `pr-agent policy <owner/repo> --block --why "<quote>" --evidence <comment url>`.
 - You give it up yourself (the fix needs a CI workflow edit, goes past the 400-line cap, or the premise didn't hold) → `pr-agent claim set <issue_id> dropped --why "<reason>"`. Never record your own drop as `declined`: that status means a maintainer said no.
 - A question from a maintainer → leave the claim `waiting` and flag it in the run summary so the human sees it. The agent doesn't post free-form issue comments.
 - Expired (7 days, no reply) → `pr-agent claim set <issue_id> expired --why "no reply in 7 days"`.
