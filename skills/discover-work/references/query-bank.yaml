@@ -27,6 +27,7 @@ pinned:
     # Ashish, 2026-10-09: build without waiting for assignment, and compete on issues others
     # claimed but haven't fixed; the maintainer picks which PR to merge.
     compete: true
+    max_open_prs: 3               # Ashish, 2026-10-09: up to three open Kestra PRs at once
     why: "Kestra Hacktober track 01 (Ashish, 2026-10-05; build-first since 2026-10-09)"
     rules: >-
       Kestra Hacktober track 01. Take only issues whose fix is in the Vue/TypeScript UI (ui/)

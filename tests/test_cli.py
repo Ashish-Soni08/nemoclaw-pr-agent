@@ -311,3 +311,8 @@ def test_a_thumbs_down_on_the_plan_stops_build_directly(home, monkeypatch):
     out = app._build_unanswered(None, claims)
     assert [c["state"] for c in out] == ["waiting", "build"]
     assert app.registry.claims()["issue:plotly/plotly.js#8076"]["status"] == "waiting"
+
+
+def test_kestra_allows_three_open_prs(home):
+    from pr_agent.cli import App
+    assert App().pin("kestra-io/kestra")["max_open_prs"] == 3

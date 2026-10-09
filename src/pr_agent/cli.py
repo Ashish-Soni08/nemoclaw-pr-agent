@@ -182,6 +182,8 @@ class App:
             c["claim_required"] = v.claim_required
             if pin := self.pin(c["repo"]):
                 c["track"] = pin.get("rules", "")
+                if pin.get("max_open_prs"):
+                    c["max_open_prs"] = pin["max_open_prs"]
             if v.claim_required:
                 c["lane_hint"] = "ask-first"
             self.ledger.log("policy", c["repo"], f"AI policy {v.verdict}", "; ".join(v.matches[:2]) or "no AI policy text found", ", ".join(v.files[:4]) or "-", v.verdict)
@@ -712,6 +714,9 @@ def pr_cmd(app: App, a: argparse.Namespace) -> int:
     if a.pcmd == "open":
         meta = Meta.load(Path(a.path))
         v = app.policy(meta.repo, gh)
+        if (pin := app.pin(meta.repo)) and pin.get("max_open_prs"):
+            # The owner raised the one-open-PR cap for this pinned repo (Kestra: 3, 2026-10-09).
+            limits = {**limits, "max_open_prs_per_repo": int(pin["max_open_prs"])}
         ledger_url = app.s.agent.get("ledger", {}).get("public_url", "")
         pr = open_pr(gh, meta, v, app.registry, app.ledger, limits, a.title, _body(a.body_file), ledger_url, draft=a.draft or app.s.agent.get("open_as_draft", False), allow_unclear=app.allow_unclear, dco=app.s.agent.get("dco_signoff"))
         SeenStore(app.s.state_dir / "seen.tsv").mark(meta.issue_id, "pr", "pr opened", None)
