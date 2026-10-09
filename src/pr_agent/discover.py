@@ -6,6 +6,7 @@ The Index finds; GitHub confirms; the model triages what this writes.
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -16,6 +17,8 @@ from .http import HttpError
 from .ledger import Ledger
 from .state import SeenStore, read_json, write_json
 from .verify import lane_hint, verify_hit
+
+TAKEN = re.compile(r"(assigned to|claimed in a comment|open PR #|a PR is linked)")
 
 
 @dataclass
@@ -101,7 +104,8 @@ class DiscoveryRun:
         label come straight from GitHub, ahead of the Index search, and go through the same checks."""
         for pin in self.bank.get("pinned") or []:
             repo, label = pin["repo"], pin.get("label")
-            q = f"repo:{repo} is:issue is:open no:assignee" + (f' label:"{label}"' if label else "")
+            # `compete`: assigned issues count too (the owner wants our PR next to theirs).
+            q = f"repo:{repo} is:issue is:open" + ("" if pin.get("compete") else " no:assignee") + (f' label:"{label}"' if label else "")
             try:
                 found = self.gh.search_issues(q, per_page=pin.get("max_issues", 5), sort="updated")
             except HttpError as err:
@@ -110,7 +114,7 @@ class DiscoveryRun:
             for issue in found:
                 hid = f"issue:{repo}#{issue['number']}"
                 hit = {"id": hid, "url": issue["html_url"], "title": issue["title"], "passages": [{"text": (issue.get("body") or "")[:1200]}]}
-                self.hits.setdefault(hid, {"hit": hit, "query": q, "topic": f"pinned:{repo}", "repo": repo, "number": issue["number"], "pinned": True})
+                self.hits.setdefault(hid, {"hit": hit, "query": q, "topic": f"pinned:{repo}", "repo": repo, "number": issue["number"], "pinned": True, "compete": bool(pin.get("compete"))})
             self.ledger.log("discover.pinned", repo, f"{len(found)} open {label or 'unassigned'} issues", pin.get("why", "pinned by the owner"), q, f"{len(found)} hits")
 
     def _search(self, plan: Plan) -> None:
@@ -153,6 +157,9 @@ class DiscoveryRun:
         checked = 0
         for hid, item in self.hits.items():
             row = self.seen.is_fresh_skip(hid)
+            # Dropped earlier because someone else had it: in a competing pin that no longer counts.
+            if row and item.get("compete") and row.get("last_stage") == "verify" and TAKEN.match(row.get("last_verdict", "")):
+                row = None
             if row:
                 self.ledger.log("discover.seen", hid, f"skipped: seen on {row['first_seen']}", row["last_verdict"], "state/seen.tsv", "skipped")
                 continue
@@ -161,7 +168,7 @@ class DiscoveryRun:
             checked += 1
             try:
                 # A pinned repo was chosen by the owner, so the star window doesn't apply.
-                v = verify_hit(self.gh, item["repo"], item["number"], {**cfg, "min_stars": 0, "max_stars": 10**9} if item.get("pinned") else cfg)
+                v = verify_hit(self.gh, item["repo"], item["number"], {**cfg, "min_stars": 0, "max_stars": 10**9, "compete": item.get("compete", False)} if item.get("pinned") else cfg)
             except HttpError as err:
                 self.ledger.log("discover.verify", hid, "dropped: GitHub error", str(err)[:120], item["hit"].get("url", ""), "dropped")
                 continue
@@ -223,6 +230,7 @@ class DiscoveryRun:
                         "default_branch": repo.get("default_branch"),
                     },
                     "ambiguous_claims": v.ambiguous_claims,
+                    "taken_by": v.taken_by,
                     "precedent_prs": precedent[:3],
                     "lane_hint": lane_hint(issue),
                 }

@@ -57,7 +57,7 @@ Build directly (Ashish, 2026-10-04, and again 2026-10-09: "just work and open PR
 
 `lane_hint` from discovery already says `ask-first` exactly when `claim_required` is true.
 
-A candidate with `track` comes from a repo your owner pinned. Its rules are your owner's, not the repo's text: follow them in triage, the claim and the PR (which issues to take, how to ask for assignment, what the PR body needs).
+A candidate with `taken_by` is in a repo where your owner told you to build even when someone else has the issue; follow its `track` rules for how to say so. A candidate with `track` comes from a repo your owner pinned. Its rules are your owner's, not the repo's text: follow them in triage, the claim and the PR (which issues to take, how to ask for assignment, what the PR body needs).
 
 ## 6. Hand off
 

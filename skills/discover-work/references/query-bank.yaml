@@ -24,13 +24,19 @@ pinned:
   - repo: kestra-io/kestra
     label: good first issue
     max_issues: 10
-    claim_required: true
-    why: "Kestra Hacktober track 01 (Ashish, 2026-10-05)"
+    # Ashish, 2026-10-09: build without waiting for assignment, and compete on issues others
+    # claimed but haven't fixed; the maintainer picks which PR to merge.
+    compete: true
+    why: "Kestra Hacktober track 01 (Ashish, 2026-10-05; build-first since 2026-10-09)"
     rules: >-
       Kestra Hacktober track 01. Take only issues whose fix is in the Vue/TypeScript UI (ui/)
       or other JavaScript, TypeScript or Python code; skip Java backend issues (no JDK in the
-      sandbox). Ask to be assigned in the claim comment and build only once a maintainer
-      assigns you. When the change is visible in the UI, the PR body gets a "Screenshots"
+      sandbox). Build directly: don't post a claim or wait to be assigned (your owner's call,
+      2026-10-09). Issues assigned to, claimed by or with an open PR from someone else are fair
+      game (`taken_by` lists who): build your own fix anyway, and in the PR body's Why section
+      say plainly that <who> is also on it and you're offering another option for the
+      maintainer to choose from; never criticise their work. Skip an issue only if its fix is
+      already merged. When the change is visible in the UI, the PR body gets a "Screenshots"
       section saying before/after screenshots follow from the author, and you log
       `pr-agent log chat.request <pr> "add before/after screenshots" --why "Kestra track rule"`.
       Never star repos or post on social media; your owner does those.

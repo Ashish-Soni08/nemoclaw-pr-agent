@@ -279,7 +279,8 @@ class App:
                     who = ", ".join(f"{r['author']} {r['content']}" for r in c["reactions"])
                     Ledger(self.ledger.path, "").log("claim.status", c["issue_id"], "claim waiting", f"reaction on our plan ({who}); build-directly no longer applies", rec.get("comment_url", ""), "waiting")
                 continue
-            if c["state"] not in ("waiting", "expired") or c["replies"] or c["assignees"]:
+            compete = bool((self.pin(rec["repo"]) or {}).get("compete"))
+            if c["state"] not in ("waiting", "expired") or c["replies"] or (c["assignees"] and not compete):
                 continue
             if self.policy(rec["repo"], gh).claim_required:
                 continue

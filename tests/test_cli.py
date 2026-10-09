@@ -271,6 +271,12 @@ def test_a_pinned_repo_requires_a_claim_even_without_a_written_rule(home, monkey
     assert app.policy("acme/lib", None).claim_required is False
 
 
+def test_kestra_builds_directly_and_competes(home):
+    from pr_agent.cli import App
+    pin = App().pin("kestra-io/kestra")
+    assert pin["compete"] is True and not pin.get("claim_required")
+
+
 def test_unanswered_claims_build_unless_the_repo_requires_a_yes(home, monkeypatch):
     from pr_agent import policy as policy_mod
     from pr_agent.cli import App
