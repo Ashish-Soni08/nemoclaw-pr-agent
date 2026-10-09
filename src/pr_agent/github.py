@@ -16,6 +16,7 @@ from typing import Any, Callable
 from .http import Client, HttpError
 
 API = "https://api.github.com"
+SEARCH_GAP_S = 3.0
 
 
 class Held(RuntimeError):
@@ -31,6 +32,8 @@ class GitHub:
     hold: Callable[[], str] | None = None
     _repo_cache: dict[str, dict[str, Any]] = field(default_factory=dict)
     _login: str | None = None
+    _last_search: float = 0.0
+    clock: Callable[[], float] = time.monotonic
 
     @classmethod
     def create(cls, token: str) -> "GitHub":
@@ -86,7 +89,22 @@ class GitHub:
         from urllib.parse import quote
 
         order = f"&sort={sort}&order=desc" if sort else ""
-        return self.client.get_json(f"/search/issues?q={quote(q)}&per_page={per_page}{order}").get("items", [])
+        path = f"/search/issues?q={quote(q)}&per_page={per_page}{order}"
+        # GitHub's secondary (burst) limit refuses back-to-back searches with a 403, which used to
+        # fail the second pinned repo every run. Space searches out and wait once when it happens.
+        for attempt in range(2):
+            wait = SEARCH_GAP_S - (self.clock() - self._last_search)
+            if wait > 0:
+                self.sleep(wait)
+            resp = self.client.request("GET", path)
+            self._last_search = self.clock()
+            if resp.ok:
+                return resp.json().get("items", [])
+            limited = resp.status in (403, 429) and b"rate limit" in resp.body.lower()
+            if not limited or attempt:
+                raise HttpError(resp, path)
+            self.sleep(float(resp.headers.get("retry-after") or 60))
+        return []
 
     def pr_review_comments(self, full: str, number: int) -> list[dict[str, Any]]:
         return self.client.get_json(f"/repos/{full}/pulls/{number}/comments?per_page=100")
@@ -136,8 +154,11 @@ class GitHub:
     def compare(self, repo: str, base: str, head: str) -> dict[str, Any]:
         return self.client.get_json(f"/repos/{repo}/compare/{base}...{head}")
 
-    def push_files(self, repo: str, branch: str, parent: str, changes: dict[str, bytes | None], message: str) -> str:
-        """Commit `changes` on top of `parent` and point `branch` at it. None deletes a path."""
+    def push_files(self, repo: str, branch: str, parent: str, changes: dict[str, bytes | None], message: str, signoff: dict[str, str] | None = None) -> str:
+        """Commit `changes` on top of `parent` and point `branch` at it. None deletes a path.
+
+        `signoff` ({name, email}): the owner's DCO sign-off, for repos he listed in config. The commit
+        is authored in his name and carries his Signed-off-by line, as the DCO check expects."""
         base_commit = self.client.get_json(f"/repos/{repo}/git/commits/{parent}")
         tree = []
         for path, content in sorted(changes.items()):
@@ -147,7 +168,11 @@ class GitHub:
             blob = self._post(f"/repos/{repo}/git/blobs", {"content": base64.b64encode(content).decode(), "encoding": "base64"})
             tree.append({"path": path, "mode": getattr(content, "mode", "100644"), "type": "blob", "sha": blob["sha"]})
         new_tree = self._post(f"/repos/{repo}/git/trees", {"base_tree": base_commit["tree"]["sha"], "tree": tree})
-        commit = self._post(f"/repos/{repo}/git/commits", {"message": message, "tree": new_tree["sha"], "parents": [parent]})
+        body: dict[str, Any] = {"message": message, "tree": new_tree["sha"], "parents": [parent]}
+        if signoff:
+            who = {"name": signoff["name"], "email": signoff["email"]}
+            body |= {"message": f"{message.rstrip()}\n\nSigned-off-by: {who['name']} <{who['email']}>", "author": who, "committer": who}
+        commit = self._post(f"/repos/{repo}/git/commits", body)
         ref = self.client.request("GET", f"/repos/{repo}/git/ref/heads/{branch}")
         if ref.ok:
             self._post(f"/repos/{repo}/git/refs/heads/{branch}", {"sha": commit["sha"], "force": True}, method="PATCH")

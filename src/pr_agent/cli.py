@@ -19,13 +19,13 @@ from .devindex import DevIndex
 from .discover import DiscoveryRun
 from .github import GitHub, Held
 from .ledger import Ledger, append_tsv, sync_to_dataset
-from .publish import Refused, Registry, ack_comments, check_changes, claim_updates, current_parent, gated_tree, open_pr, post_claim, pr_updates, record_gate
+from .publish import Refused, Registry, ack_comments, check_changes, claim_updates, current_parent, gated_tree, open_pr, post_claim, pr_updates, record_gate, signoff_for
 from .state import CreditBook, SeenStore, read_json, write_json
 from .spend import append as append_spend, append_tokens, huggingface_billed, snapshot as spend_snapshot
 from .summary import compact_candidates, daily_digest, run_summary
 from .usage import menu, report, router_models
 from .jail import IsolationUnavailable
-from .workspace import Meta, diff_text, isolation_selfcheck, prepare, run, run_tests, setup_env
+from .workspace import Meta, diff_text, isolation_selfcheck, prepare, rebase, run, run_tests, setup_env
 
 
 def out(data: Any) -> None:
@@ -347,7 +347,7 @@ def build_parser() -> argparse.ArgumentParser:
     wsub = ws.add_subparsers(dest="wcmd", required=True)
     wp = wsub.add_parser("prepare")
     wp.add_argument("issue_id")
-    for name in ("setup", "diff", "info"):
+    for name in ("setup", "diff", "info", "rebase"):
         wsub.add_parser(name).add_argument("path")
     wt = wsub.add_parser("test")
     wt.add_argument("path")
@@ -388,6 +388,7 @@ def build_parser() -> argparse.ArgumentParser:
     pp = psub.add_parser("push", help="push a re-gated update to an open PR's branch")
     pp.add_argument("key")
     pp.add_argument("--message", required=True)
+    pp.add_argument("--rebase", action="store_true", help="build on upstream as it is now, after `workspace rebase` (a maintainer asked for a rebase)")
 
     cl = sub.add_parser("claim", help="ask-first lane")
     csub = cl.add_subparsers(dest="ccmd", required=True)
@@ -651,6 +652,14 @@ def workspace_cmd(app: App, a: argparse.Namespace) -> int:
         out(res)
     elif a.wcmd == "diff":
         print(diff_text(ws, meta.base_sha))
+    elif a.wcmd == "rebase":
+        res = rebase(meta)
+        if res["conflicts"]:
+            app.ledger.log("fix.rebase", meta.issue_id, "rebase hit conflicts; workspace left as it was", ", ".join(res["conflicts"])[:200], meta.path, "conflict")
+        else:
+            app.ledger.log("fix.rebase", meta.issue_id, "rebased onto current upstream" if res["rebased"] else "already on current upstream", f"base {meta.base_branch}@{res['base_sha'][:10]}; run the gate again", meta.path, "ok")
+        out(res)
+        return 1 if res["conflicts"] else 0
     elif a.wcmd == "exec":
         cmd = a.command[1:] if a.command[:1] == ["--"] else a.command
         if not cmd:
@@ -695,7 +704,7 @@ def pr_cmd(app: App, a: argparse.Namespace) -> int:
         meta = Meta.load(Path(a.path))
         v = app.policy(meta.repo, gh)
         ledger_url = app.s.agent.get("ledger", {}).get("public_url", "")
-        pr = open_pr(gh, meta, v, app.registry, app.ledger, limits, a.title, _body(a.body_file), ledger_url, draft=a.draft or app.s.agent.get("open_as_draft", False), allow_unclear=app.allow_unclear)
+        pr = open_pr(gh, meta, v, app.registry, app.ledger, limits, a.title, _body(a.body_file), ledger_url, draft=a.draft or app.s.agent.get("open_as_draft", False), allow_unclear=app.allow_unclear, dco=app.s.agent.get("dco_signoff"))
         SeenStore(app.s.state_dir / "seen.tsv").mark(meta.issue_id, "pr", "pr opened", None)
         out({"url": pr["html_url"], "number": pr["number"]})
     elif a.pcmd == "updates":
@@ -721,12 +730,19 @@ def pr_cmd(app: App, a: argparse.Namespace) -> int:
             tree = gated_tree(meta)
         except Refused:
             raise Refused("run the self-review gate on the updated diff before pushing") from None
+        signoff = signoff_for(app.s.agent.get("dco_signoff") or {}, meta.repo, a.message)
         fork = gh.ensure_fork(meta.repo)
         changes = check_changes(meta, app.s.agent.get("limits", {}), tree)
-        # Stay on the commit the PR was opened on, so the push only adds the review fixes.
-        parent = current_parent(gh, fork, meta, changes, head=rec.get("parent") or meta.base_sha)
-        sha = gh.push_files(fork, meta.branch, parent, changes, a.message)
-        app.registry.save_pr(a.key, {"commit": sha})
+        if a.rebase:
+            # Upstream as it is now; current_parent still refuses if it touched our files since the
+            # workspace's (rebased) base.
+            gh.sync_fork(fork, meta.base_branch)
+            parent = current_parent(gh, fork, meta, changes)
+        else:
+            # Stay on the commit the PR was opened on, so the push only adds the review fixes.
+            parent = current_parent(gh, fork, meta, changes, head=rec.get("parent") or meta.base_sha)
+        sha = gh.push_files(fork, meta.branch, parent, changes, a.message, signoff=signoff)
+        app.registry.save_pr(a.key, {"commit": sha, "parent": parent})
         app.ledger.log("follow-up.push", a.key, "pushed review fixes", a.message, sha, "pushed")
         out({"commit": sha})
     return 0

@@ -288,8 +288,8 @@ class Blob(bytes):
 GIT = ["git", "-c", "core.fsmonitor=false", "-c", "core.hooksPath=/dev/null", "-c", "core.quotePath=false"]
 
 
-def git(args: list[str], ws: Path, timeout: int = 120) -> subprocess.CompletedProcess[str]:
-    env = scrubbed_env({"GIT_CONFIG_NOSYSTEM": "1", "GIT_CONFIG_GLOBAL": "/dev/null"})
+def git(args: list[str], ws: Path, timeout: int = 120, extra_env: dict[str, str] | None = None) -> subprocess.CompletedProcess[str]:
+    env = scrubbed_env({"GIT_CONFIG_NOSYSTEM": "1", "GIT_CONFIG_GLOBAL": "/dev/null", **(extra_env or {})})
     return run(GIT + args, cwd=ws, timeout=timeout, env=env)
 
 
@@ -300,6 +300,40 @@ def stage_tree(ws: Path) -> str:
     if proc.returncode != 0:
         raise RuntimeError(f"git write-tree failed: {proc.stderr[-300:]}")
     return proc.stdout.strip()
+
+
+def rebase(meta: Meta, fetch_url: str | None = None) -> dict[str, Any]:
+    """Move the workspace's change onto the base branch as upstream has it now (a maintainer asked
+    for a rebase, or upstream touched the same files). Only the agent's own git runs, no repo code.
+    The gate verdict no longer matches afterwards (the base is part of its hash), so re-run it."""
+    ws = Path(meta.path)
+    old = meta.base_sha
+    tree = stage_tree(ws)
+    who = {"GIT_AUTHOR_NAME": "nemoclaw-pr-agent", "GIT_AUTHOR_EMAIL": "pr-agent@users.noreply.github.com"}
+    who |= {"GIT_COMMITTER_NAME": who["GIT_AUTHOR_NAME"], "GIT_COMMITTER_EMAIL": who["GIT_AUTHOR_EMAIL"]}
+    wip = git(["commit-tree", tree, "-p", old, "-m", "pr-agent: change before rebase"], ws, extra_env=who)
+    if wip.returncode != 0:
+        raise RuntimeError(f"git commit-tree failed: {wip.stderr[-300:]}")
+    wip_sha = wip.stdout.strip()
+    # The URL, not the `origin` remote: repo code can rewrite .git/config.
+    fetch = git(["fetch", "-q", "--depth", "50", fetch_url or f"https://github.com/{meta.repo}.git", meta.base_branch], ws, timeout=600)
+    if fetch.returncode != 0:
+        raise RuntimeError(f"git fetch failed: {fetch.stderr[-300:]}")
+    new = git(["rev-parse", "FETCH_HEAD"], ws).stdout.strip()
+    if new == old:
+        return {"rebased": False, "base_sha": old, "conflicts": []}
+    git(["reset", "-q", "--hard", new], ws)
+    pick = git(["cherry-pick", "--no-commit", wip_sha], ws)
+    if pick.returncode != 0:
+        conflicts = git(["diff", "--name-only", "--diff-filter=U"], ws).stdout.split()
+        git(["cherry-pick", "--abort"], ws)
+        git(["reset", "-q", "--hard", wip_sha], ws)
+        git(["reset", "-q", "--soft", old], ws)
+        return {"rebased": False, "base_sha": old, "conflicts": conflicts or ["(see git output)"], "error": pick.stderr[-300:]}
+    git(["reset", "-q"], ws)
+    meta.base_sha = new
+    meta.save()
+    return {"rebased": True, "base_sha": new, "previous_base": old, "conflicts": []}
 
 
 def changed_files(ws: Path, base_sha: str, tree: str | None = None) -> dict[str, Blob | None]:

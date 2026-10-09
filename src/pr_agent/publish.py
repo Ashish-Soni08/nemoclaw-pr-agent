@@ -197,6 +197,17 @@ def gated_tree(meta: Meta) -> str:
     return tree
 
 
+def signoff_for(cfg: dict[str, Any], repo: str, message: str) -> dict[str, str] | None:
+    """The owner's DCO identity when he listed `repo` in `dco_signoff`, else None. A sign-off the
+    agent wrote itself is refused anywhere: signing is the owner's act, not the agent's."""
+    if re.search(r"^\s*signed-off-by:", message, re.IGNORECASE | re.MULTILINE):
+        raise Refused("don't write a Signed-off-by line; pr-agent adds the owner's sign-off for the repos he listed")
+    repos = {r.lower() for r in (cfg.get("repos") or [])}
+    if repo.lower() not in repos or not cfg.get("name") or not cfg.get("email"):
+        return None
+    return {"name": cfg["name"], "email": cfg["email"]}
+
+
 def current_parent(gh: GitHub, fork: str, meta: Meta, changes: dict[str, Blob | None], head: str | None = None) -> str:
     """The commit to build the push on: the fork's base branch as it is now (or `head`).
 
@@ -243,7 +254,7 @@ def preflight(meta: Meta, policy: PolicyVerdict, registry: Registry, limits: dic
     return gate, changes
 
 
-def open_pr(gh: GitHub, meta: Meta, policy: PolicyVerdict, registry: Registry, ledger: Ledger, limits: dict[str, Any], title: str, body: str, ledger_url: str, draft: bool = False, allow_unclear: bool = False) -> dict[str, Any]:
+def open_pr(gh: GitHub, meta: Meta, policy: PolicyVerdict, registry: Registry, ledger: Ledger, limits: dict[str, Any], title: str, body: str, ledger_url: str, draft: bool = False, allow_unclear: bool = False, dco: dict[str, Any] | None = None) -> dict[str, Any]:
     try:
         gate, changes = preflight(meta, policy, registry, limits, title, body, allow_unclear)
     except Refused as why:
@@ -258,7 +269,8 @@ def open_pr(gh: GitHub, meta: Meta, policy: PolicyVerdict, registry: Registry, l
     except Refused as why:
         ledger.log("pr.refused", meta.issue_id, "did not open PR", str(why), meta.path, "refused")
         raise
-    commit_sha = gh.push_files(fork, meta.branch, parent, changes, f"{title}\n\nFixes {issue_url}")
+    message = f"{title}\n\nFixes {issue_url}"
+    commit_sha = gh.push_files(fork, meta.branch, parent, changes, message, signoff=signoff_for(dco or {}, meta.repo, message))
     head = f"{fork.split('/')[0]}:{meta.branch}"
     pr = gh.open_pr(meta.repo, head, meta.base_branch, title, full_body, draft)
     key = f"{meta.repo}#{pr['number']}"

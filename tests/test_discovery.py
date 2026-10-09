@@ -207,3 +207,29 @@ def test_pinned_repo_without_a_label_takes_recent_unassigned_issues(tmp_path):
     run.run()
     q = [u for m, u, b in fg.calls if "/search/issues" in u][0]
     assert "label" not in q and "sort=updated" in q and "per_page=10" in q
+
+
+def test_search_waits_between_calls_and_once_on_the_burst_limit(fake):
+    from fakes import client
+    from pr_agent.github import GitHub
+    from pr_agent.http import HttpError
+
+    slept: list[float] = []
+    now = [100.0]
+    gh = GitHub(client("https://api.github.com", fake), sleep=lambda s: (slept.append(s), now.__setitem__(0, now[0] + s)), clock=lambda: now[0])
+    calls = {"n": 0}
+
+    def search(method, url, body):
+        calls["n"] += 1
+        if calls["n"] == 2:
+            return 403, {"message": "You have exceeded a secondary rate limit. Please wait a few minutes before you try again."}
+        return 200, {"items": [{"number": calls["n"]}]}
+
+    fake.add("GET", "/search/issues*", search)
+    assert gh.search_issues("repo:a/b is:issue")[0]["number"] == 1
+    assert gh.search_issues("repo:c/d is:issue")[0]["number"] == 3
+    assert slept == [3.0, 60.0]
+
+    fake.add("GET", "/search/issues*", {"message": "Resource not accessible"}, status=403)
+    with pytest.raises(HttpError):
+        gh.search_issues("repo:e/f is:issue")
