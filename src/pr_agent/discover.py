@@ -105,7 +105,7 @@ class DiscoveryRun:
             try:
                 found = self.gh.search_issues(q, per_page=pin.get("max_issues", 5), sort="updated")
             except HttpError as err:
-                self.ledger.log("discover.pinned", repo, "pinned search failed", str(err)[:120], q, "error")
+                self.ledger.log("discover.pinned", repo, "pinned search failed", str(err)[:300], q, "error")
                 continue
             for issue in found:
                 hid = f"issue:{repo}#{issue['number']}"

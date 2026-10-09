@@ -12,6 +12,14 @@ limits:
 open_as_draft: false            # poteto: open PRs ready for review
 claim_expire_days: 7
 
+# DCO sign-off in the owner's name, only for repos he listed (Ashish, 2026-10-09: yes for
+# NVIDIA-NeMo/Gym). `pr-agent` adds it to the commit; the agent never writes one itself.
+# CLAs are never signed by the agent.
+dco_signoff:
+  repos: [NVIDIA-NeMo/Gym]
+  name: Ashish Soni
+  email: 44482363+Ashish-Soni08@users.noreply.github.com
+
 # `allows` and `allows-with-disclosure` always continue; `bans` never does.
 # Most repos have no written AI policy, so this switch decides throughput.
 # Ashish chose true on 2026-10-01: every PR and claim still says it's AI-written,

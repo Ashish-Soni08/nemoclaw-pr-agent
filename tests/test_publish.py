@@ -344,3 +344,65 @@ def test_pr_updates_keep_the_finding_and_the_review_summary(gh, fake, tmp_path):
     summary, inline = new
     assert summary["kind"] == "review_summary" and "bounded cooldown" in summary["body"] and "internal" not in summary["body"]
     assert inline["review_id"] == 7 and "Use a cooldown" in inline["body"] and "rg output" not in inline["body"]
+
+
+def _upstream_commit(git_repo, path, text):
+    import subprocess
+    Path(git_repo, path).write_text(text)
+    subprocess.run(["git", "commit", "-qam", f"edit {path}"], cwd=git_repo, check=True, capture_output=True)
+    return subprocess.run(["git", "rev-parse", "HEAD"], cwd=git_repo, check=True, capture_output=True, text=True).stdout.strip()
+
+
+def test_rebase_moves_the_change_onto_upstream(ws, git_repo):
+    from pr_agent.workspace import rebase
+    fix(ws)
+    Path(ws.path, "notes.py").write_text("x = 1\n")
+    head = _upstream_commit(git_repo, "tests/test_pkg.py", "from pkg import add\n\ndef test_add():\n    assert add(2, 2) == 4\n")
+    old = ws.base_sha
+
+    res = rebase(ws, fetch_url=str(git_repo))
+
+    assert res == {"rebased": True, "base_sha": head, "previous_base": old, "conflicts": []}
+    changes = changed_files(Path(ws.path), ws.base_sha)
+    assert sorted(changes) == ["notes.py", "pkg.py"] and changes["pkg.py"].endswith(b"a + b\n")
+    assert "add(2, 2)" in Path(ws.path, "tests", "test_pkg.py").read_text()
+
+
+def test_rebase_conflict_leaves_the_workspace_as_it_was(ws, git_repo):
+    from pr_agent.workspace import rebase
+    fix(ws)
+    old = ws.base_sha
+    _upstream_commit(git_repo, "pkg.py", "def add(a, b):\n    return sum((a, b))\n")
+
+    res = rebase(ws, fetch_url=str(git_repo))
+
+    assert res["rebased"] is False and res["conflicts"] == ["pkg.py"] and ws.base_sha == old
+    assert Path(ws.path, "pkg.py").read_text().endswith("a + b\n")
+    assert sorted(changed_files(Path(ws.path), old)) == ["pkg.py"]
+
+
+def test_dco_signoff_only_for_listed_repos(ws, tmp_path, gh, fake):
+    from pr_agent.publish import signoff_for
+    dco = {"repos": ["O/R"], "name": "Owner Name", "email": "1+owner@users.noreply.github.com"}
+    assert signoff_for(dco, "other/repo", "fix: x") is None
+    with pytest.raises(Refused, match="Signed-off-by"):
+        signoff_for(dco, "other/repo", "fix: x\n\nSigned-off-by: Agent <a@b>")
+
+    fix(ws)
+    record_gate(ws, "pass", "no findings", ["thermo-nuclear-review", "security-review"])
+    _fork_moved(fake, ws, {"status": "ahead", "files": []})
+    open_pr(gh, ws, ALLOW, Registry(tmp_path), Ledger(tmp_path / "d.tsv", "r1"), LIMITS, "fix(pkg): add numbers", BODY, "", dco=dco)
+
+    commit = fake.called("POST", "/git/commits")[0]
+    who = {"name": "Owner Name", "email": "1+owner@users.noreply.github.com"}
+    assert commit["author"] == who and commit["committer"] == who
+    assert commit["message"].endswith("\n\nSigned-off-by: Owner Name <1+owner@users.noreply.github.com>")
+
+
+def test_no_signoff_by_default(ws, tmp_path, gh, fake):
+    fix(ws)
+    record_gate(ws, "pass", "no findings", ["thermo-nuclear-review", "security-review"])
+    _fork_moved(fake, ws, {"status": "ahead", "files": []})
+    open_pr(gh, ws, ALLOW, Registry(tmp_path), Ledger(tmp_path / "d.tsv", "r1"), LIMITS, "fix(pkg): add numbers", BODY, "")
+    commit = fake.called("POST", "/git/commits")[0]
+    assert "author" not in commit and "Signed-off-by" not in commit["message"]
