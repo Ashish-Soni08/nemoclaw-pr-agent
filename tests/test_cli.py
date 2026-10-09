@@ -338,6 +338,7 @@ def test_watch_lists_new_unclaimed_issues_once(home):
     out = app._watch(gh, [{"repo": a, "label": "good first issue", "watch": True, "rules": "track"}])
     assert [w["issue_id"] for w in out] == [f"issue:{a}#1"] and out[0]["track"] == "track"
     assert SeenStore(app.s.state_dir / "seen.tsv").is_fresh_skip(f"issue:{a}#2")
+    assert app.ledger.rows()[-1]["decision"] == "1 new of 3 checked"
 
 
 def test_run_now_reports_when_hermes_refuses(home, tmp_path, monkeypatch):

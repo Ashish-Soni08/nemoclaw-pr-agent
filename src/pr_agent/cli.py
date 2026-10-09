@@ -286,6 +286,7 @@ class App:
             except HttpError as err:
                 self.ledger.log("watch", repo, "watch search failed", str(err)[:300], q, "error")
                 continue
+            new = 0
             for issue in found:
                 iid = f"issue:{repo}#{issue['number']}"
                 if iid in self.registry.claims() or seen.is_fresh_skip(iid):
@@ -296,6 +297,9 @@ class App:
                     continue
                 out.append({"issue_id": iid, "url": issue["html_url"], "title": issue["title"], "body": (issue.get("body") or "")[:1500], "track": pin.get("rules", "")})
                 self.ledger.log("watch", iid, "new issue to ask for", pin.get("why", "watched pin"), issue["html_url"], "found")
+                new += 1
+            # One row per tick, so the dashboard shows the watch ran even when nothing is new.
+            self.ledger.log("watch", repo, f"{new} new of {len(found)} checked", pin.get("why", "watched pin"), q, f"{new} new")
         return out
 
     def _build_unanswered(self, gh: GitHub, claims: list[dict[str, Any]]) -> list[dict[str, Any]]:
