@@ -262,8 +262,23 @@ class App:
         if not self.registry.prs() and not self.registry.claims():
             return {}
         gh = self.gh()
-        items = {"prs": pr_updates(gh, self.registry, self.ledger), "claims": [c for c in claim_updates(gh, self.registry) if c["state"] != "waiting" or c["replies"]]}
+        claims = self._build_unanswered(gh, claim_updates(gh, self.registry))
+        items = {"prs": pr_updates(gh, self.registry, self.ledger), "claims": [c for c in claims if c["state"] != "waiting" or c["replies"]]}
         return {k: v for k, v in items.items() if v}
+
+    def _build_unanswered(self, gh: GitHub, claims: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """Build directly unless the repo requires a yes (Ashish, 2026-10-09): an unanswered claim in
+        a repo whose written rules don't ask for one moves to build, so the agent fixes it."""
+        for c in claims:
+            if c["state"] not in ("waiting", "expired") or c["replies"] or c["assignees"]:
+                continue
+            rec = self.registry.claims()[c["issue_id"]]
+            if self.policy(rec["repo"], gh).claim_required:
+                continue
+            self.registry.save_claim(c["issue_id"], {"status": "build"})
+            Ledger(self.ledger.path, "").log("claim.status", c["issue_id"], "claim build", "build-directly: the repo's written rules don't ask to wait for a yes, and nobody replied", rec.get("comment_url", ""), "build")
+            c["state"] = "build"
+        return claims
 
     def prestep_follow_up(self) -> dict[str, Any]:
         if self.busy("follow-up"):

@@ -173,12 +173,11 @@ def test_per_run_cap_spans_separate_processes(tmp_path):
     assert len(fake.calls) == 1
 
 
-def test_lane_hint_builds_directly_unless_the_issue_is_unsettled():
+def test_lane_hint_builds_directly_whatever_the_labels():
     from pr_agent.verify import lane_hint
     assert lane_hint({"labels": []}) == "go-directly"
-    assert lane_hint({"labels": [{"name": "bug"}, {"name": "documentation"}]}) == "go-directly"
-    assert lane_hint({"labels": [{"name": "Needs-Triage"}]}) == "ask-first"
-    assert lane_hint({"labels": [{"name": "RFC"}]}) == "ask-first"
+    assert lane_hint({"labels": [{"name": "Needs-Triage"}]}) == "go-directly"
+    assert lane_hint({"labels": [{"name": "RFC"}, {"name": "enhancement"}]}) == "go-directly"
 
 
 def test_pinned_repo_issues_come_first_and_skip_the_star_window(tmp_path):

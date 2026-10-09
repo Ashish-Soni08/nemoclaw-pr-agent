@@ -50,12 +50,20 @@ ALLOW = [
     re.compile(rf"{AI}[^.\n]{{0,60}}(?:contributions?|pull requests?|prs?|assistance|tools?)[^.\n]{{0,40}}(?:are|is) (?:welcome|accepted|allowed|fine|ok)", re.I),
     re.compile(rf"(?:welcome|accept|allow)\w*[^.\n]{{0,40}}{AI}[- ]?(?:assisted|generated|written)", re.I),
 ]
+# Only a written rule that you must wait for a yes or an assignment before working counts
+# (Ashish, 2026-10-09). "Comment on the issue to signal you're working on it" is a heads-up,
+# not a gate: hermes-agent was wrongly gated by the old, looser patterns.
 CLAIM = [
-    re.compile(r"(?:comment on|ask (?:to be|for)|request to be|get|be) (?:the issue|assigned)", re.I),
-    re.compile(r"before (?:you )?(?:start|starting|begin|beginning|working|opening)[^.\n]{0,80}(?:comment|assign|discuss|ask)", re.I),
-    re.compile(r"\bclaim (?:an |the )?issue", re.I),
+    re.compile(r"\bwait (?:for|until)\b[^.\n]{0,60}(?:maintainer|member|team|approv|confirm|assign|go[- ]ahead|green light)", re.I),
+    re.compile(r"(?:get|be|ask to be|request to be|must be|need to be|until you are|once you are|after you(?:'ve| have)? been) (?:formally )?(?:assigned|approved)\b[^.\n]{0,60}(?:before|first|prior)", re.I),
+    re.compile(r"(?:before|prior to) (?:you )?(?:start(?:ing)?|begin(?:ning)?|work(?:ing)? on|open(?:ing)?|submit(?:ting)?|creat(?:e|ing))[^.\n]{0,80}(?:get|be|wait for|need|must have|obtain|so (?:that )?(?:we|a maintainer|someone) can)[^.\n]{0,30}(?:assign|approv|confirm|agree)", re.I),
+    re.compile(r"(?:after|once) you (?:get|have|receive)[^.\n]{0,30}(?:formal )?(?:approval|go[- ]ahead|confirmation|assign)", re.I),
+    re.compile(r"(?:do not|don't|never|please don't) (?:open|submit|create|send)[^.\n]{0,40}(?:pull request|\bpr\b)[^.\n]{0,40}(?:without|until|before)[^.\n]{0,60}(?:assign|approv|discuss|agree|confirm)", re.I),
+    re.compile(r"only (?:work on|pick up|take|open (?:prs|pull requests) for) issues[^.\n]{0,40}(?:assigned|approved|accepted|triaged)", re.I),
 ]
 
+# Bump when the patterns change, so cached verdicts made under older rules are redone.
+RULES = 2
 VERDICTS = ("allows", "allows-with-disclosure", "bans", "unclear")
 
 
@@ -68,6 +76,7 @@ class PolicyVerdict:
     matches: list[str] = field(default_factory=list)
     checked_at: str = ""
     maintainer_evidence: str = ""
+    rules: int = 0
 
     @property
     def continues(self) -> bool:
@@ -89,6 +98,13 @@ def _sentences(text: str, pattern: re.Pattern[str]) -> list[str]:
 
 
 def classify(texts: dict[str, str], agent_files: list[str]) -> tuple[str, bool, list[str]]:
+    verdict, claim, matches = _classify(texts, agent_files)
+    if claim:
+        matches = matches + [f"claim: {s}" for s in claim_sentences("\n".join(texts.values()))[:2]]
+    return verdict, claim, matches
+
+
+def _classify(texts: dict[str, str], agent_files: list[str]) -> tuple[str, bool, list[str]]:
     joined = "\n".join(texts.values())
     bans = [s for p in BAN for s in _sentences(joined, p)]
     if bans:
@@ -105,7 +121,11 @@ def classify(texts: dict[str, str], agent_files: list[str]) -> tuple[str, bool, 
 
 
 def _claim(text: str) -> bool:
-    return any(p.search(text) for p in CLAIM)
+    return bool(claim_sentences(text))
+
+
+def claim_sentences(text: str) -> list[str]:
+    return [s for p in CLAIM for s in _sentences(text, p)]
 
 
 def blocked(cache_dir: Path) -> dict[str, dict[str, str]]:
@@ -131,7 +151,7 @@ def check(gh: GitHub, repo: str, cache_dir: Path, ttl_days: int = 30, refresh: b
         return PolicyVerdict(repo, "bans", False, [], [f"maintainer said no: {stop['why']}"], stop["at"], stop["evidence"])
     cache = cache_dir / f"{repo.replace('/', '__')}.json"
     cached = read_json(cache, None)
-    if cached and not refresh:
+    if cached and not refresh and cached.get("rules") == RULES:
         age = datetime.now(timezone.utc) - datetime.fromisoformat(cached["checked_at"])
         if age < timedelta(days=ttl_days):
             return PolicyVerdict(**cached)
@@ -146,7 +166,7 @@ def check(gh: GitHub, repo: str, cache_dir: Path, ttl_days: int = 30, refresh: b
             texts[path] = text
     present_agent_files = [p for p in AGENT_FILES if gh.file_text(repo, p) is not None]
     verdict, claim, matches = classify(texts, present_agent_files)
-    result = PolicyVerdict(repo, verdict, claim, sorted(texts) + present_agent_files, matches, datetime.now(timezone.utc).isoformat(timespec="seconds"))
+    result = PolicyVerdict(repo, verdict, claim, sorted(texts) + present_agent_files, matches, datetime.now(timezone.utc).isoformat(timespec="seconds"), rules=RULES)
     write_json(cache, asdict(result))
     return result
 

@@ -27,6 +27,6 @@ metadata:
 
 ## Building a claim without an answer
 
-Under the build-directly default (Ashish, 2026-10-04), a waiting claim in a repo that doesn't require a yes (`claim_required` false) may be moved to build: `pr-agent claim set <issue_id> build --why "<reason>"`. Never record that as `approved`: nobody said yes. `pr-agent pr open` refuses a `build` claim when the repo requires a yes.
+Under the build-directly default (Ashish, 2026-10-04 and 2026-10-09), every waiting claim in a repo that doesn't require a yes (`claim_required` false) moves to build on the next run, unless a maintainer has said no or asked to wait: `pr-agent claim set <issue_id> build --why "build-directly: repo doesn't require a yes"`. Never record that as `approved`: nobody said yes. `pr-agent pr open` refuses a `build` claim when the repo requires a yes.
 
 Replies from non-maintainers don't count as approval.
