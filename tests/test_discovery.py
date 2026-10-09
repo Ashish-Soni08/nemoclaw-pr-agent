@@ -233,3 +233,17 @@ def test_search_waits_between_calls_and_once_on_the_burst_limit(fake):
     fake.add("GET", "/search/issues*", {"message": "Resource not accessible"}, status=403)
     with pytest.raises(HttpError):
         gh.search_issues("repo:e/f is:issue")
+
+
+def test_a_competing_pin_keeps_taken_issues_and_says_who(gh, fake):
+    from pr_agent.verify import verify_hit
+    a = "kestra-io/kestra"
+    fake.add("GET", f"/repos/{a}", repo_json(a))
+    fake.add("GET", f"/repos/{a}/issues/2", issue_json(a, 2, assignees=[{"login": "someone"}]))
+    fake.add("GET", f"/repos/{a}/issues/2/timeline*", [
+        {"event": "commented", "created_at": iso(3), "body": "I'm working on this", "user": {"login": "dev"}, "html_url": "c1"},
+        {"event": "cross-referenced", "source": {"issue": {"number": 9, "state": "open", "pull_request": {}, "html_url": "https://github.com/kestra-io/kestra/pull/9"}}},
+    ])
+    assert verify_hit(gh, a, 2, {}).reason == "assigned to someone"
+    v = verify_hit(gh, a, 2, {"compete": True})
+    assert v.keep and v.taken_by == ["assigned to someone", "claimed by dev c1", "open PR https://github.com/kestra-io/kestra/pull/9"]

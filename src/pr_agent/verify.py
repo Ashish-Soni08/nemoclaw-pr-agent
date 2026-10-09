@@ -26,6 +26,9 @@ class Verdict:
     issue: dict[str, Any] = field(default_factory=dict)
     repo: dict[str, Any] = field(default_factory=dict)
     ambiguous_claims: list[str] = field(default_factory=list)
+    # Someone else already has it (assigned, claimed or an open PR). Only filled for a pinned repo
+    # whose owner said to compete anyway; elsewhere any of these drops the issue.
+    taken_by: list[str] = field(default_factory=list)
 
 
 def _age_days(ts: str, now: datetime) -> float:
@@ -57,9 +60,15 @@ def verify_hit(gh: GitHub, full: str, number: int, cfg: dict[str, Any], now: dat
         return Verdict(False, f"issue {issue.get('state')}", issue_url)
     if issue.get("locked"):
         return Verdict(False, "issue locked", issue_url)
+    # Kestra track (Ashish, 2026-10-09): issues others claimed but nobody fixed yet get our own PR
+    # too, and the maintainer picks which to merge.
+    compete = bool(cfg.get("compete"))
+    taken: list[str] = []
     if issue.get("assignees") or issue.get("assignee"):
         who = ",".join(a["login"] for a in issue.get("assignees") or [issue["assignee"]])
-        return Verdict(False, f"assigned to {who}", issue_url)
+        if not compete:
+            return Verdict(False, f"assigned to {who}", issue_url)
+        taken.append(f"assigned to {who}")
     if _age_days(issue["updated_at"], now) > cfg.get("issue_updated_within_days", 180):
         return Verdict(False, f"stale: last update {issue['updated_at'][:10]}", issue_url)
     labels = {l["name"].lower() for l in issue.get("labels", [])}
@@ -73,18 +82,26 @@ def verify_hit(gh: GitHub, full: str, number: int, cfg: dict[str, Any], now: dat
         if kind == "cross-referenced":
             src = (event.get("source") or {}).get("issue") or {}
             if "pull_request" in src and src.get("state") == "open":
-                return Verdict(False, f"open PR #{src.get('number')} references it", src.get("html_url", issue_url))
+                if not compete:
+                    return Verdict(False, f"open PR #{src.get('number')} references it", src.get("html_url", issue_url))
+                taken.append(f"open PR {src.get('html_url', '#' + str(src.get('number')))}")
         if kind == "connected":
-            return Verdict(False, "a PR is linked to it", issue_url)
+            if not compete:
+                return Verdict(False, "a PR is linked to it", issue_url)
+            taken.append("a PR is linked to it")
         if kind == "commented" and CLAIM.search(event.get("body") or ""):
             age = _age_days(event.get("created_at", issue["created_at"]), now)
             author = (event.get("user") or event.get("actor") or {}).get("login", "?")
             if age <= cfg.get("claim_hard_days", 14):
-                return Verdict(False, f"claimed in a comment by {author}", event.get("html_url", issue_url))
+                if not compete:
+                    return Verdict(False, f"claimed in a comment by {author}", event.get("html_url", issue_url))
+                taken.append(f"claimed by {author} {event.get('html_url', '')}".strip())
+                continue
             if age <= cfg.get("claim_window_days", 30):
                 ambiguous.append(f"{author} ({int(age)}d ago): {(event.get('body') or '')[:160]}")
 
-    return Verdict(True, "open, unassigned, nobody on it", issue_url, issue=issue, repo=repo, ambiguous_claims=ambiguous)
+    reason = "open; others on it, competing per the owner's track" if taken else "open, unassigned, nobody on it"
+    return Verdict(True, reason, issue_url, issue=issue, repo=repo, ambiguous_claims=ambiguous, taken_by=taken)
 
 
 def lane_hint(issue: dict[str, Any]) -> str:

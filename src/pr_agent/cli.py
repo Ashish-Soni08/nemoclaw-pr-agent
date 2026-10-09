@@ -18,6 +18,7 @@ from .config import REPO_ROOT, MissingSecret, Settings, secret
 from .devindex import DevIndex
 from .discover import DiscoveryRun
 from .github import GitHub, Held
+from .http import HttpError
 from .ledger import Ledger, append_tsv, sync_to_dataset
 from .publish import Refused, Registry, ack_comments, check_changes, claim_updates, current_parent, gated_tree, objected, open_pr, post_claim, pr_updates, record_gate, signoff_for
 from .state import CreditBook, SeenStore, read_json, write_json
@@ -25,6 +26,7 @@ from .spend import append as append_spend, append_tokens, huggingface_billed, sn
 from .summary import compact_candidates, daily_digest, run_summary
 from .usage import menu, report, router_models
 from .jail import IsolationUnavailable
+from .verify import verify_hit
 from .workspace import Meta, diff_text, isolation_selfcheck, prepare, rebase, run, run_tests, setup_env
 
 
@@ -182,6 +184,8 @@ class App:
             c["claim_required"] = v.claim_required
             if pin := self.pin(c["repo"]):
                 c["track"] = pin.get("rules", "")
+                if pin.get("max_open_prs"):
+                    c["max_open_prs"] = pin["max_open_prs"]
             if v.claim_required:
                 c["lane_hint"] = "ask-first"
             self.ledger.log("policy", c["repo"], f"AI policy {v.verdict}", "; ".join(v.matches[:2]) or "no AI policy text found", ", ".join(v.files[:4]) or "-", v.verdict)
@@ -259,12 +263,40 @@ class App:
         return {"wakeAgent": True, "context": ctx}
 
     def _follow_up_items(self) -> dict[str, Any]:
-        if not self.registry.prs() and not self.registry.claims():
+        watching = [p for p in self.s.query_bank.get("pinned") or [] if p.get("watch")]
+        if not self.registry.prs() and not self.registry.claims() and not watching:
             return {}
         gh = self.gh()
         claims = self._build_unanswered(gh, claim_updates(gh, self.registry))
-        items = {"prs": pr_updates(gh, self.registry, self.ledger), "claims": [c for c in claims if c["state"] != "waiting" or c["replies"]]}
+        items = {"prs": pr_updates(gh, self.registry, self.ledger), "claims": [c for c in claims if c["state"] != "waiting" or c["replies"]], "watch": self._watch(gh, watching)}
         return {k: v for k, v in items.items() if v}
+
+    def _watch(self, gh: GitHub, pins: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """Pinned repos that ask contributors to wait for assignment (Kestra): check every follow-up
+        for new open, unassigned issues nobody is on yet, so the agent asks to be assigned first
+        (Ashish, 2026-10-09: "watch and comment as soon as something comes up")."""
+        seen = SeenStore(self.s.state_dir / "seen.tsv")
+        cfg = {**self.s.query_bank.get("verify", {}), "min_stars": 0, "max_stars": 10**9}
+        out = []
+        for pin in pins:
+            repo, label = pin["repo"], pin.get("label")
+            q = f"repo:{repo} is:issue is:open no:assignee" + (f' label:"{label}"' if label else "")
+            try:
+                found = gh.search_issues(q, per_page=pin.get("watch_issues", 5), sort="created")
+            except HttpError as err:
+                self.ledger.log("watch", repo, "watch search failed", str(err)[:300], q, "error")
+                continue
+            for issue in found:
+                iid = f"issue:{repo}#{issue['number']}"
+                if iid in self.registry.claims() or seen.is_fresh_skip(iid):
+                    continue
+                v = verify_hit(gh, repo, issue["number"], cfg)
+                if not v.keep:
+                    seen.mark(iid, "verify", v.reason, self.s.query_bank.get("recheck_after_days", 14))
+                    continue
+                out.append({"issue_id": iid, "url": issue["html_url"], "title": issue["title"], "body": (issue.get("body") or "")[:1500], "track": pin.get("rules", "")})
+                self.ledger.log("watch", iid, "new issue to ask for", pin.get("why", "watched pin"), issue["html_url"], "found")
+        return out
 
     def _build_unanswered(self, gh: GitHub, claims: list[dict[str, Any]]) -> list[dict[str, Any]]:
         """Build directly unless the repo requires a yes (Ashish, 2026-10-09): an unanswered claim in
@@ -279,7 +311,8 @@ class App:
                     who = ", ".join(f"{r['author']} {r['content']}" for r in c["reactions"])
                     Ledger(self.ledger.path, "").log("claim.status", c["issue_id"], "claim waiting", f"reaction on our plan ({who}); build-directly no longer applies", rec.get("comment_url", ""), "waiting")
                 continue
-            if c["state"] not in ("waiting", "expired") or c["replies"] or c["assignees"]:
+            compete = bool((self.pin(rec["repo"]) or {}).get("compete"))
+            if c["state"] not in ("waiting", "expired") or c["replies"] or (c["assignees"] and not compete):
                 continue
             if self.policy(rec["repo"], gh).claim_required:
                 continue
@@ -711,6 +744,9 @@ def pr_cmd(app: App, a: argparse.Namespace) -> int:
     if a.pcmd == "open":
         meta = Meta.load(Path(a.path))
         v = app.policy(meta.repo, gh)
+        if (pin := app.pin(meta.repo)) and pin.get("max_open_prs"):
+            # The owner raised the one-open-PR cap for this pinned repo (Kestra: 3, 2026-10-09).
+            limits = {**limits, "max_open_prs_per_repo": int(pin["max_open_prs"])}
         ledger_url = app.s.agent.get("ledger", {}).get("public_url", "")
         pr = open_pr(gh, meta, v, app.registry, app.ledger, limits, a.title, _body(a.body_file), ledger_url, draft=a.draft or app.s.agent.get("open_as_draft", False), allow_unclear=app.allow_unclear, dco=app.s.agent.get("dco_signoff"))
         SeenStore(app.s.state_dir / "seen.tsv").mark(meta.issue_id, "pr", "pr opened", None)

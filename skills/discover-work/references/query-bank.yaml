@@ -25,14 +25,19 @@ pinned:
     label: good first issue
     max_issues: 10
     claim_required: true
+    # Ashish, 2026-10-09: Kestra asks contributors to wait for assignment, so respect it: every
+    # follow-up checks for new issues and asks to be assigned right away.
+    watch: true
+    max_open_prs: 3               # Ashish, 2026-10-09: up to three open Kestra PRs at once
     why: "Kestra Hacktober track 01 (Ashish, 2026-10-05)"
     rules: >-
       Kestra Hacktober track 01. Take only issues whose fix is in the Vue/TypeScript UI (ui/)
       or other JavaScript, TypeScript or Python code; skip Java backend issues (no JDK in the
       sandbox). Ask to be assigned in the claim comment and build only once a maintainer
-      assigns you. When the change is visible in the UI, the PR body gets a "Screenshots"
-      section saying before/after screenshots follow from the author, and you log
-      `pr-agent log chat.request <pr> "add before/after screenshots" --why "Kestra track rule"`.
+      assigns you. Ask fast: new issues get claimed within hours. Never take an issue someone
+      else is assigned to or has claimed. When the change is visible in the UI, the PR body gets
+      a "Screenshots" section saying before/after screenshots follow from the author, and you
+      log `pr-agent log chat.request <pr> "add before/after screenshots" --why "Kestra track rule"`.
       Never star repos or post on social media; your owner does those.
 
   # The runtime this agent runs on, and the OpenClaw assistant (Ashish, 2026-10-05). Normal
