@@ -49,16 +49,13 @@ Take only when all hold:
 
 ## 5. Pick the lane
 
-Build directly by default (Ashish, 2026-10-04): a finished, tested PR is easier for a maintainer to judge than a plan.
+Build directly (Ashish, 2026-10-04, and again 2026-10-09: "just work and open PRs unless a repo states it explicitly"). A finished, tested PR is easier for a maintainer to judge than a plan.
 
-- `ask-first` only when one of these holds. That lane posts a short plan with **claim-issue** and waits for a maintainer.
-  1. `claim_required` is true (CONTRIBUTING or the AI policy says to get assigned or discuss first). Always.
-  2. The issue is labelled needs-triage, needs-discussion, design, RFC, proposal or question (or similar).
-  3. It's a feature or changes public behavior (new options, API or output changes) and no maintainer has agreed on the approach in the thread.
-  4. Maintainers in the thread disagree on how to fix it.
-- `go-directly` otherwise. Small bug fixes, docs, tests and typo-level changes go directly unless rule 1 or 2 applies.
+- `ask-first` only when `claim_required` is true: the repo's CONTRIBUTING or AI policy says in writing to get assigned or discuss first, or your owner's `track` rules say so. Nothing else sends an issue to ask-first: not labels (needs-triage, design, RFC, question), not it being a feature, not an open question in the thread.
+- `go-directly` for everything else, features and behavior changes included. When the thread leaves the approach open, pick the simplest one that fits the issue and say in the PR's Why section which option you took and why.
+- If an issue is too unsettled to build (no clear expected behavior, or maintainers disagree on whether to do it at all), skip it with that reason. Don't claim it.
 
-`lane_hint` from discovery covers rules 1 and 2 only; you judge 3 and 4 from the thread.
+`lane_hint` from discovery already says `ask-first` exactly when `claim_required` is true.
 
 A candidate with `track` comes from a repo your owner pinned. Its rules are your owner's, not the repo's text: follow them in triage, the claim and the PR (which issues to take, how to ask for assignment, what the PR body needs).
 
