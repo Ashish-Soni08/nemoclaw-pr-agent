@@ -269,3 +269,22 @@ def test_a_pinned_repo_requires_a_claim_even_without_a_written_rule(home, monkey
     monkeypatch.setattr(policy_mod, "check", lambda gh, repo, cache: policy_mod.PolicyVerdict(repo, "unclear", False, []))
     assert app.policy("Kestra-io/Kestra", None).claim_required is True
     assert app.policy("acme/lib", None).claim_required is False
+
+
+def test_unanswered_claims_build_unless_the_repo_requires_a_yes(home, monkeypatch):
+    from pr_agent import policy as policy_mod
+    from pr_agent.cli import App
+    app = App()
+    gated = {"kubeflow/pipelines"}
+    monkeypatch.setattr(policy_mod, "check", lambda gh, repo, cache: policy_mod.PolicyVerdict(repo, "unclear", repo in gated, []))
+    for iid, repo in (("issue:nous/hermes#1", "nous/hermes"), ("issue:kubeflow/pipelines#2", "kubeflow/pipelines"), ("issue:nous/hermes#3", "nous/hermes")):
+        app.registry.save_claim(iid, {"repo": repo, "status": "waiting", "comment_url": "u"})
+    claims = [
+        {"issue_id": "issue:nous/hermes#1", "state": "waiting", "replies": [], "assignees": []},
+        {"issue_id": "issue:kubeflow/pipelines#2", "state": "waiting", "replies": [], "assignees": []},
+        {"issue_id": "issue:nous/hermes#3", "state": "waiting", "replies": [{"author": "m", "body": "please wait"}], "assignees": []},
+    ]
+    out = app._build_unanswered(None, claims)
+    assert [c["state"] for c in out] == ["build", "waiting", "waiting"]
+    assert app.registry.claims()["issue:nous/hermes#1"]["status"] == "build"
+    assert app.registry.claims()["issue:kubeflow/pipelines#2"]["status"] == "waiting"

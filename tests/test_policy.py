@@ -36,7 +36,33 @@ def test_no_policy_is_unclear_and_claim_detected():
     verdict, claim, matches = classify({"CONTRIBUTING.md": "Before you start working on an issue, comment on it so we can assign it to you."}, [])
     assert verdict == "unclear"
     assert claim is True
-    assert matches == []
+    assert matches == ["claim: Before you start working on an issue, comment on it so we can assign it to you."]
+
+
+def test_a_heads_up_comment_is_not_a_claim_rule():
+    # NousResearch/hermes-agent's CONTRIBUTING (2026-10-09): asks for a heads-up, never a yes.
+    hermes = "Before You Start\nSearch First: check existing issues and PRs. For larger work, comment on the issue to signal you're working on it."
+    assert classify({"CONTRIBUTING.md": hermes}, [])[1] is False
+    kubeflow = "Wait for a member from the Kubeflow Pipelines team to respond. After you get formal approval, you can start working."
+    splink = "Please wait for a maintainer to confirm that a pull request would be welcome and to agree its scope."
+    assert classify({"CONTRIBUTING.md": kubeflow}, [])[1] is True
+    assert classify({"CONTRIBUTING.md": splink}, [])[1] is True
+
+
+def test_verdicts_cached_under_older_rules_are_redone(tmp_path):
+    from pr_agent.policy import RULES, check
+    from pr_agent.state import write_json
+    write_json(tmp_path / "o__r.json", {"repo": "o/r", "verdict": "unclear", "claim_required": True, "files": [], "checked_at": "2099-01-01T00:00:00+00:00"})
+
+    class GH:
+        def file_text(self, repo, path):
+            return None
+
+        def list_dir(self, repo, path):
+            return []
+
+    v = check(GH(), "o/r", tmp_path)
+    assert v.claim_required is False and v.rules == RULES
 
 
 def test_unrelated_not_words_do_not_ban():
