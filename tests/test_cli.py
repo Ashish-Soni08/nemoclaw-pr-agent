@@ -338,3 +338,20 @@ def test_watch_lists_new_unclaimed_issues_once(home):
     out = app._watch(gh, [{"repo": a, "label": "good first issue", "watch": True, "rules": "track"}])
     assert [w["issue_id"] for w in out] == [f"issue:{a}#1"] and out[0]["track"] == "track"
     assert SeenStore(app.s.state_dir / "seen.tsv").is_fresh_skip(f"issue:{a}#2")
+    assert app.ledger.rows()[-1]["decision"] == "1 new of 3 checked"
+
+
+def test_run_now_reports_when_hermes_refuses(home, tmp_path, monkeypatch):
+    from datetime import datetime, timezone
+    from pr_agent import runnow
+    from pr_agent.cli import App, run_now
+    hermes = tmp_path / "hermes"
+    (hermes / "cron").mkdir(parents=True)
+    (hermes / "cron" / "jobs.json").write_text(json.dumps({"jobs": [{"id": "j1", "name": "pr-agent-follow-up", "schedule": "30 */2 * * *"}]}))
+    monkeypatch.setattr(runnow, "cron_process_running", lambda: False)
+    monkeypatch.setattr(runnow.subprocess, "Popen", lambda *a, **k: k["stdout"].write("Job is already being fired by the scheduler; not run again.\n"))
+    monkeypatch.setattr(runnow.time, "sleep", lambda s: None)
+    app = App()
+    res = run_now(app, "owner asked", datetime(2026, 10, 9, 13, 5, tzinfo=timezone.utc), follow_up=True)
+    assert res["started"] is False and "not run again" in res["reason"]
+    assert app.ledger.rows()[-1]["result"] == "refused"

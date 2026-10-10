@@ -286,6 +286,7 @@ class App:
             except HttpError as err:
                 self.ledger.log("watch", repo, "watch search failed", str(err)[:300], q, "error")
                 continue
+            new = 0
             for issue in found:
                 iid = f"issue:{repo}#{issue['number']}"
                 if iid in self.registry.claims() or seen.is_fresh_skip(iid):
@@ -296,6 +297,9 @@ class App:
                     continue
                 out.append({"issue_id": iid, "url": issue["html_url"], "title": issue["title"], "body": (issue.get("body") or "")[:1500], "track": pin.get("rules", "")})
                 self.ledger.log("watch", iid, "new issue to ask for", pin.get("why", "watched pin"), issue["html_url"], "found")
+                new += 1
+            # One row per tick, so the dashboard shows the watch ran even when nothing is new.
+            self.ledger.log("watch", repo, f"{new} new of {len(found)} checked", pin.get("why", "watched pin"), q, f"{new} new")
         return out
 
     def _build_unanswered(self, gh: GitHub, claims: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -661,7 +665,9 @@ def run_now(app: App, why: str, now: datetime | None = None, follow_up: bool = F
     g = app.guard()
     if g.over:
         return {"started": False, "reason": f"usage guard: {g.over}"}
-    runnow.start(job["id"], app.s.home / "run-now.log")
+    if refused := runnow.start(job["id"], app.s.home / "run-now.log"):
+        app.ledger.log("chat.run", name, f"Hermes refused to start the {'follow-up' if follow_up else 'run'}", refused[:200], "run-now.log", "refused")
+        return {"started": False, "reason": f"Hermes refused: {refused[:200]}"}
     app.ledger.log("chat.run", name, f"started the {'follow-up' if follow_up else 'run'} early", why[:200], "telegram", "started")
     return {"started": True, "next_scheduled": f"{nxt:%H:%M} UTC" if nxt else "unknown", "note": "the summary arrives on Telegram when the run ends"}
 

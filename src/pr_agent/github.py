@@ -179,7 +179,15 @@ class GitHub:
         commit = self._post(f"/repos/{repo}/git/commits", body)
         ref = self.client.request("GET", f"/repos/{repo}/git/ref/heads/{branch}")
         if ref.ok:
-            self._post(f"/repos/{repo}/git/refs/heads/{branch}", {"sha": commit["sha"], "force": True}, method="PATCH")
+            try:
+                self._post(f"/repos/{repo}/git/refs/heads/{branch}", {"sha": commit["sha"], "force": True}, method="PATCH")
+            except HttpError as err:
+                if err.response.status != 404:
+                    raise
+                # The ref exists (the GET worked), so a 404 here is GitHub refusing the new history:
+                # it brings in upstream .github/workflows changes the fork doesn't have yet, and the
+                # token has no workflow scope (Gym#4001, 2026-10-04 and 2026-10-09).
+                raise HttpError(err.response, f"{repo} branch {branch}: GitHub refused the update, most likely because the new base brings upstream workflow changes the fork lacks (no workflow scope). The owner can click 'Sync fork' on https://github.com/{repo}, then push again") from None
         else:
             self._post(f"/repos/{repo}/git/refs", {"ref": f"refs/heads/{branch}", "sha": commit["sha"]})
         return commit["sha"]
