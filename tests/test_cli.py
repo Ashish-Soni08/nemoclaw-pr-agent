@@ -317,8 +317,8 @@ def test_kestra_allows_three_open_prs(home):
     from pr_agent.cli import App
     app = App()
     assert app.pin("kestra-io/kestra")["max_open_prs"] == 3
-    assert app.s.agent["limits"]["max_open_prs_per_repo"] == 5
-    assert app.s.agent["limits"]["max_fixes_per_run"] == 4
+    assert app.s.agent["limits"]["max_open_prs_per_repo"] == 10
+    assert app.s.agent["limits"]["max_fixes_per_run"] == 10
 
 
 def test_watch_lists_new_unclaimed_issues_once(home):

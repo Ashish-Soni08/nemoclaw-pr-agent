@@ -47,7 +47,7 @@ The sandbox blocks all network traffic except the hosts below. Keys never enter 
 | Hugging Face write token | The ledger dataset | Host only (`~/.pr-agent-sync.env`); the sandbox never has it |
 | Telegram bot token | One bot | Hermes gateway |
 
-Hard limits are enforced in code, not prompts (`src/pr_agent/publish.py`): a PR only opens if the gate passed on that exact diff and the repo's AI policy allows it; at most five open PRs per repo (three in Kestra); at most 400 changed lines and 20 files; it never edits `.github/workflows/` and never merges. Every PR and comment says it was written by an AI agent, and every PR body opens with a one-line AI disclosure.
+Hard limits are enforced in code, not prompts (`src/pr_agent/publish.py`): a PR only opens if the gate passed on that exact diff and the repo's AI policy allows it; at most ten open PRs per repo (three in Kestra); at most 400 changed lines and 20 files; it never edits `.github/workflows/` and never merges. Every PR and comment says it was written by an AI agent, and every PR body opens with a one-line AI disclosure.
 
 Code from the repos it works on runs in a Landlock jail (`src/pr_agent/jail.py`). Installs, tests, repro scripts and linters can write only the workspace, package caches and `/tmp`, and can't see the agent's state, key placeholders or gate verdicts, so a malicious test can't forge a pass. `scripts/deploy.sh` runs `pr-agent selfcheck` and fails the deploy if the jail doesn't hold, and each run checks the agent's own code against a checksum list written at deploy.
 
