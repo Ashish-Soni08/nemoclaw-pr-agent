@@ -54,6 +54,7 @@ class UsageReport:
     unknown_models: list[str]
     month_budget: float
     day_budget: float
+    billed: bool = False  # month_usd is HF's own bill, which came in above our estimate
 
     @property
     def over(self) -> str:

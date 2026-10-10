@@ -46,9 +46,33 @@ def append(path: Path, rows: list[SpendRow]) -> None:
             fh.write("\t".join(row.cells(ts)) + "\n")
 
 
-def huggingface(month_usd: float, budget: float) -> SpendRow:
-    return SpendRow("huggingface", month_usd, "usd", month_usd, max(budget - month_usd, 0), budget,
-                    "estimate:hermes-state.db tokens x provider prices, cached input at the cache rate (month to date)")
+def huggingface(month_usd: float, budget: float, billed: bool = False) -> SpendRow:
+    source = "estimate:hermes-state.db tokens x provider prices, cached input at the cache rate (month to date)"
+    if billed:
+        source = "billed:HF's last month-to-date bill from this ledger (higher than our token estimate)"
+    return SpendRow("huggingface", month_usd, "usd", month_usd, max(budget - month_usd, 0), budget, source)
+
+
+def last_billed(path: Path, now: datetime | None = None) -> float | None:
+    """The newest HF bill the host's ledger sync wrote to spend.tsv this month, or None.
+
+    Our estimate prices every token at one provider's rates, but HF spreads requests over providers
+    with their own prices (Oct 10: we said $112, HF billed $240), so the guard can't trust it alone.
+    A bill only grows within a month, so an older row this month is still a floor."""
+    now = now or datetime.now(timezone.utc)
+    month = now.strftime("%Y-%m")
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()[1:]
+    except OSError:
+        return None
+    for line in reversed(lines):
+        cells = line.split("\t")
+        if len(cells) >= 8 and cells[1] == "huggingface" and cells[7].startswith("api:") and cells[0].startswith(month):
+            try:
+                return float(cells[4])
+            except ValueError:
+                return None
+    return None
 
 
 HF_URL = "https://huggingface.co"
@@ -134,10 +158,11 @@ def lambda_billed(instances: list[dict[str, Any]], rate_usd: float, credit_usd: 
     return SpendRow("lambda", round(hours, 3), "hours", round(cost, 4), max(credit_usd - cost, 0), credit_usd, source)
 
 
-def snapshot(state_dir: Path, ledger_dir: Path, cfg: dict[str, Any], hf_month_usd: float, firecrawl_key: str = "") -> list[SpendRow]:
+def snapshot(state_dir: Path, ledger_dir: Path, cfg: dict[str, Any], hf_month_usd: float, firecrawl_key: str = "",
+             hf_billed: bool = False) -> list[SpendRow]:
     s = cfg.get("spend", {})
     rows = [
-        huggingface(hf_month_usd, cfg.get("usage", {}).get("monthly_budget_usd", 20)),
+        huggingface(hf_month_usd, cfg.get("usage", {}).get("monthly_budget_usd", 20), hf_billed),
         firecrawl(CreditBook(state_dir / "firecrawl_credits.tsv"), s.get("firecrawl_plan_credits", 1000), firecrawl_key),
         lambda_billed(s["lambda_instances"], s.get("lambda_hourly_usd", 1.29), s.get("lambda_credit_usd", 75)) if s.get("lambda_instances")
         else lambda_hours(state_dir, s.get("lambda_hourly_usd", 1.29), s.get("lambda_credit_usd", 75)),
