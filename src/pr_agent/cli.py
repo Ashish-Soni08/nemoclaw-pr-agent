@@ -20,14 +20,14 @@ from .discover import DiscoveryRun
 from .github import GitHub, Held
 from .http import HttpError
 from .ledger import Ledger, append_tsv, sync_to_dataset
-from .publish import Refused, Registry, ack_comments, check_changes, claim_updates, current_parent, gated_tree, objected, open_pr, post_claim, pr_updates, record_gate, signoff_for
+from .publish import Refused, Registry, ack_comments, check_changes, claim_updates, current_parent, gated_tree, latest_feedback, objected, open_pr, post_claim, pr_updates, record_gate, reply_guard, signoff_for, utcnow
 from .state import CreditBook, SeenStore, read_json, write_json
 from .spend import append as append_spend, append_tokens, huggingface_billed, snapshot as spend_snapshot
 from .summary import compact_candidates, daily_digest, run_summary
 from .usage import menu, report, router_models
 from .jail import IsolationUnavailable
 from .verify import verify_hit
-from .workspace import Meta, diff_text, isolation_selfcheck, prepare, rebase, run, run_tests, setup_env
+from .workspace import Meta, diff_text, isolation_selfcheck, prepare, rebase, run, run_tests, setup_env, stage_tree
 
 
 def out(data: Any) -> None:
@@ -762,6 +762,12 @@ def pr_cmd(app: App, a: argparse.Namespace) -> int:
     elif a.pcmd in ("reply", "comment"):
         rec = followup_target(app, a.key)
         body = _body(a.body_file)
+        ws = Path(rec["workspace"]) if rec.get("workspace") else None
+        try:
+            reply_guard(rec, body, latest_feedback(gh, rec, a.comment_id if a.pcmd == "reply" else None), stage_tree(ws) if ws and ws.is_dir() else None)
+        except Refused as why:
+            app.ledger.log("follow-up.refused", a.key, f"did not reply on {a.key}", str(why)[:200], rec.get("url", ""), "refused")
+            raise
         if a.pcmd == "reply":
             res = gh.reply_review_comment(rec["repo"], rec["number"], a.comment_id, body)
             ack_comments(app.registry, a.key, [a.comment_id])
@@ -792,7 +798,7 @@ def pr_cmd(app: App, a: argparse.Namespace) -> int:
             # Stay on the commit the PR was opened on, so the push only adds the review fixes.
             parent = current_parent(gh, fork, meta, changes, head=rec.get("parent") or meta.base_sha)
         sha = gh.push_files(fork, meta.branch, parent, changes, a.message, signoff=signoff)
-        app.registry.save_pr(a.key, {"commit": sha, "parent": parent})
+        app.registry.save_pr(a.key, {"commit": sha, "parent": parent, "tree": tree, "pushed_at": utcnow().isoformat(timespec="seconds")})
         app.ledger.log("follow-up.push", a.key, "pushed review fixes", a.message, sha, "pushed")
         out({"commit": sha})
     return 0

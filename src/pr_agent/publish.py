@@ -286,12 +286,46 @@ def open_pr(gh: GitHub, meta: Meta, policy: PolicyVerdict, registry: Registry, l
             "opened_at": utcnow().isoformat(timespec="seconds"),
             "commit": commit_sha,
             "parent": parent,
+            "tree": stage_tree(Path(meta.path)),
+            "pushed_at": utcnow().isoformat(timespec="seconds"),
             "workspace": meta.path,
             "seen_comment_ids": [],
         },
     )
     ledger.log("pr.opened", meta.issue_id, f"opened {key}", "self-review gate passed on this diff", pr["html_url"], "open")
     return pr
+
+
+# Words that tell a maintainer a change landed. hermes-agent#135681 (2026-10-09): the agent told a
+# reviewer both asks were done, but no push had landed, and the PR was closed as superseded.
+CLAIMS_CHANGE = re.compile(r"\b(pushed|done|addressed|fixed|updated|added|applied|implemented|removed|reverted|rebased|changed|replaced|dropped|switched)\b", re.I)
+
+
+def _when(stamp: str) -> datetime:
+    return datetime.fromisoformat(stamp.replace("Z", "+00:00"))
+
+
+def latest_feedback(gh: GitHub, rec: dict[str, Any], comment_id: int | None = None) -> str | None:
+    """When the feedback being answered was written: that review comment, or else the newest
+    comment or review on the PR from someone other than the agent."""
+    me = gh.login()
+    inline = gh.pr_review_comments(rec["repo"], rec["number"])
+    if comment_id is not None:
+        return next((c.get("created_at") for c in inline if c["id"] == comment_id), None)
+    stamps = [c.get("created_at") for c in inline + gh.comments(rec["repo"], rec["number"]) if c["user"]["login"] != me]
+    stamps += [r.get("submitted_at") for r in gh.pr_reviews(rec["repo"], rec["number"]) if r["user"]["login"] != me]
+    stamps = [s for s in stamps if s]
+    return max(stamps, key=_when) if stamps else None
+
+
+def reply_guard(rec: dict[str, Any], body: str, feedback_at: str | None, ws_tree: str | None = None) -> None:
+    """Refuse a follow-up reply that gets ahead of the PR branch: while the workspace holds changes
+    the PR doesn't have, or when it says a change was made and nothing was pushed since the feedback."""
+    if ws_tree and rec.get("tree") and ws_tree != rec["tree"]:
+        raise Refused("the workspace has changes that aren't on the PR yet; run the gate and `pr-agent pr push` first, and reply only once the push succeeds. If the push is refused, don't reply: log it and leave the comment for the next run")
+    pushed = rec.get("pushed_at") or rec.get("opened_at")
+    if feedback_at and CLAIMS_CHANGE.search(body) and (not pushed or _when(pushed) < _when(feedback_at)):
+        raise Refused(f"this reply says a change was made, but nothing was pushed to the PR since that feedback ({feedback_at}); push first with `pr-agent pr push`, or if you changed nothing, say so without claiming a change")
 
 
 CLAIM_TEMPLATE = (
