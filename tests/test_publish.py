@@ -430,3 +430,41 @@ def test_push_404_on_existing_ref_explains_the_workflow_scope(gh, fake):
     fake.add("GET", "/repos/bot/r/git/ref/heads/pr-agent/issue-7", {"object": {"sha": "old"}})
     with pytest.raises(HttpError, match="Sync fork"):
         gh.push_files("bot/r", "pr-agent/issue-7", "p1", {"a.md": b"x"}, "docs: x")
+
+
+def test_reply_guard_refuses_a_reply_ahead_of_the_branch():
+    # hermes-agent#135681, 2026-10-09: "both done" was posted though the push never landed.
+    from pr_agent.publish import reply_guard
+
+    rec = {"tree": "t1", "pushed_at": "2026-10-09T10:00:00+00:00"}
+    with pytest.raises(Refused, match="aren't on the PR yet"):
+        reply_guard(rec, "Thanks, will look.", "2026-10-09T09:00:00Z", ws_tree="t2")
+    with pytest.raises(Refused, match="nothing was pushed"):
+        reply_guard(rec, "Both done: added the noqa and a behavior test.", "2026-10-09T11:00:00Z", ws_tree="t1")
+    reply_guard(rec, "Done, pushed in the latest commit.", "2026-10-09T09:00:00Z", ws_tree="t1")
+    reply_guard(rec, "Good question: the helper keeps the old signature on purpose.", "2026-10-09T11:00:00Z", ws_tree="t1")
+    # Records from before the guard have no tree; the opened time stands in for the last push.
+    with pytest.raises(Refused, match="nothing was pushed"):
+        reply_guard({"opened_at": "2026-10-08T00:00:00+00:00"}, "Fixed.", "2026-10-09T11:00:00Z")
+
+
+def test_latest_feedback_ignores_the_agent(gh, fake):
+    from pr_agent.publish import latest_feedback
+
+    fake.add("GET", "/user", {"login": "bot"})
+    fake.add("GET", "/repos/o/r/pulls/5/comments", [
+        {"id": 1, "user": {"login": "rev"}, "created_at": "2026-10-09T08:00:00Z"},
+        {"id": 2, "user": {"login": "bot"}, "created_at": "2026-10-09T12:00:00Z"},
+    ])
+    fake.add("GET", "/repos/o/r/issues/5/comments", [{"id": 3, "user": {"login": "rev"}, "created_at": "2026-10-09T09:00:00Z"}])
+    fake.add("GET", "/repos/o/r/pulls/5/reviews", [{"id": 4, "user": {"login": "rev"}, "submitted_at": "2026-10-09T10:00:00Z"}])
+    rec = {"repo": "o/r", "number": 5}
+    assert latest_feedback(gh, rec, 1) == "2026-10-09T08:00:00Z"
+    assert latest_feedback(gh, rec) == "2026-10-09T10:00:00Z"
+
+
+def test_sync_fork_reports_a_refusal(gh, fake):
+    fake.add("POST", "/repos/bot/r/merge-upstream", {"message": "Not Found"}, status=404)
+    assert gh.sync_fork("bot/r", "main") == "HTTP 404 Not Found"
+    fake.add("POST", "/repos/bot/r/merge-upstream", {"merge_type": "fast-forward"})
+    assert gh.sync_fork("bot/r", "main") == ""
