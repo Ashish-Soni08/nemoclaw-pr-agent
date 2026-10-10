@@ -89,6 +89,13 @@ def test_refuses_workflow_edits_and_caps(ws, tmp_path):
     reg.save_pr("o/r#1", {"repo": "o/r", "state": "open", "opened_at": "1999-01-01"})
     with pytest.raises(Refused, match="already have an open PR"):
         preflight(ws, ALLOW, reg, LIMITS, "fix(pkg): add numbers", BODY)
+    # Ashish, 2026-10-10: five per repo, so a second fix in the same repo opens.
+    five = {**LIMITS, "max_open_prs_per_repo": 5}
+    preflight(ws, ALLOW, reg, five, "fix(pkg): add numbers", BODY)
+    for n in range(2, 6):
+        reg.save_pr(f"o/r#{n}", {"repo": "o/r", "state": "open", "opened_at": "1999-01-01"})
+    with pytest.raises(Refused, match="5 open PRs in o/r, the cap"):
+        preflight(ws, ALLOW, reg, five, "fix(pkg): add numbers", BODY)
 
 
 def test_open_pr_pushes_via_api_and_adds_footer(ws, tmp_path, gh, fake):

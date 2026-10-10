@@ -245,8 +245,9 @@ def preflight(meta: Meta, policy: PolicyVerdict, registry: Registry, limits: dic
         raise Refused(f"repo AI policy is {policy.verdict}")
     if 0 < limits.get("max_prs_per_day", 0) <= registry.opened_today():
         raise Refused("daily PR cap reached")
-    if len(registry.open_in_repo(meta.repo)) >= limits.get("max_open_prs_per_repo", 1):
-        raise Refused(f"already have an open PR in {meta.repo}")
+    cap = limits.get("max_open_prs_per_repo", 1)
+    if len(registry.open_in_repo(meta.repo)) >= cap:
+        raise Refused(f"already have an open PR in {meta.repo}" if cap == 1 else f"already have {cap} open PRs in {meta.repo}, the cap")
     if not TITLE.match(title):
         raise Refused("title must be Conventional Commits: type(scope): subject, under ~70 chars")
     check_body(body)

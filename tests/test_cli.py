@@ -315,7 +315,10 @@ def test_a_thumbs_down_on_the_plan_stops_build_directly(home, monkeypatch):
 
 def test_kestra_allows_three_open_prs(home):
     from pr_agent.cli import App
-    assert App().pin("kestra-io/kestra")["max_open_prs"] == 3
+    app = App()
+    assert app.pin("kestra-io/kestra")["max_open_prs"] == 3
+    assert app.s.agent["limits"]["max_open_prs_per_repo"] == 10
+    assert app.s.agent["limits"]["max_fixes_per_run"] == 10
 
 
 def test_watch_lists_new_unclaimed_issues_once(home):
