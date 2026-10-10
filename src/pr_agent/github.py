@@ -146,11 +146,22 @@ class GitHub:
             self.sleep(3)
         raise RuntimeError(f"fork {fork} not ready after {wait_s}s")
 
-    def sync_fork(self, fork: str, branch: str) -> None:
+    def sync_fork(self, fork: str, branch: str) -> str:
+        """Bring the fork's branch up to upstream. Returns "" or why GitHub refused.
+
+        A new PR can still build on a stale fork (the push's base check catches clashes), but a
+        rebase push can't: on hermes-agent#135681 (2026-10-09) this failed silently, most likely
+        because upstream had touched workflow files and the token has no workflow scope."""
         if self.hold and (why := self.hold()):
             raise Held(why)
-        # Best effort: a fork that can't fast-forward is caught by the push's base check.
-        self.client.request("POST", f"/repos/{fork}/merge-upstream", {"branch": branch})
+        resp = self.client.request("POST", f"/repos/{fork}/merge-upstream", {"branch": branch})
+        if resp.ok:
+            return ""
+        try:
+            msg = resp.json().get("message", "")
+        except ValueError:
+            msg = ""
+        return f"HTTP {resp.status} {msg}".strip()
 
     def branch_head(self, repo: str, branch: str) -> str:
         return self.client.get_json(f"/repos/{repo}/git/ref/heads/{branch}")["object"]["sha"]

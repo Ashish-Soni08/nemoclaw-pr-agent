@@ -792,7 +792,10 @@ def pr_cmd(app: App, a: argparse.Namespace) -> int:
         if a.rebase:
             # Upstream as it is now; current_parent still refuses if it touched our files since the
             # workspace's (rebased) base.
-            gh.sync_fork(fork, meta.base_branch)
+            if err := gh.sync_fork(fork, meta.base_branch):
+                why = f"couldn't update {fork} {meta.base_branch} from upstream ({err}), most likely because upstream changed workflow files and the token has no workflow scope. The owner can click 'Sync fork' on https://github.com/{fork}, then push again. Until it lands, don't reply that the change is done"
+                app.ledger.log("follow-up.refused", a.key, "fork sync refused", why[:200], f"https://github.com/{fork}", "refused")
+                raise Refused(why)
             parent = current_parent(gh, fork, meta, changes)
         else:
             # Stay on the commit the PR was opened on, so the push only adds the review fixes.

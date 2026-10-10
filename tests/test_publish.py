@@ -461,3 +461,10 @@ def test_latest_feedback_ignores_the_agent(gh, fake):
     rec = {"repo": "o/r", "number": 5}
     assert latest_feedback(gh, rec, 1) == "2026-10-09T08:00:00Z"
     assert latest_feedback(gh, rec) == "2026-10-09T10:00:00Z"
+
+
+def test_sync_fork_reports_a_refusal(gh, fake):
+    fake.add("POST", "/repos/bot/r/merge-upstream", {"message": "Not Found"}, status=404)
+    assert gh.sync_fork("bot/r", "main") == "HTTP 404 Not Found"
+    fake.add("POST", "/repos/bot/r/merge-upstream", {"merge_type": "fast-forward"})
+    assert gh.sync_fork("bot/r", "main") == ""
