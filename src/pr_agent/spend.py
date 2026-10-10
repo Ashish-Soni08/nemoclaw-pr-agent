@@ -49,30 +49,31 @@ def append(path: Path, rows: list[SpendRow]) -> None:
 def huggingface(month_usd: float, budget: float, billed: bool = False) -> SpendRow:
     source = "estimate:hermes-state.db tokens x provider prices, cached input at the cache rate (month to date)"
     if billed:
-        source = "billed:HF's last month-to-date bill from this ledger (higher than our token estimate)"
+        source = "billed:HF's month-to-date bill as the host last read it (higher than our token estimate)"
     return SpendRow("huggingface", month_usd, "usd", month_usd, max(budget - month_usd, 0), budget, source)
 
 
 def last_billed(path: Path, now: datetime | None = None) -> float | None:
-    """The newest HF bill the host's ledger sync wrote to spend.tsv this month, or None.
+    """The newest HF bill the host's ledger sync handed into the sandbox this month, or None.
 
     Our estimate prices every token at one provider's rates, but HF spreads requests over providers
     with their own prices (Oct 10: we said $112, HF billed $240), so the guard can't trust it alone.
-    A bill only grows within a month, so an older row this month is still a floor."""
+    Only the host can read the bill; it uploads billed/huggingface.json after every sync. A bill only
+    grows within a month, so an older reading this month is still a floor."""
     now = now or datetime.now(timezone.utc)
-    month = now.strftime("%Y-%m")
     try:
-        lines = path.read_text(encoding="utf-8").splitlines()[1:]
-    except OSError:
-        return None
-    for line in reversed(lines):
-        cells = line.split("\t")
-        if len(cells) >= 8 and cells[1] == "huggingface" and cells[7].startswith("api:") and cells[0].startswith(month):
-            try:
-                return float(cells[4])
-            except ValueError:
-                return None
+        seen = read_json(path, None)
+        if seen and str(seen["at"]).startswith(now.strftime("%Y-%m")):
+            return float(seen["usd"])
+    except (OSError, KeyError, TypeError, ValueError):
+        pass
     return None
+
+
+def write_billed(path: Path, row: SpendRow, now: datetime | None = None) -> None:
+    """Host side: save the bill where sync-ledger.sh uploads it into the sandbox for the guard."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    write_json(path, {"usd": row.cost_usd, "at": (now or datetime.now(timezone.utc)).strftime("%Y-%m-%dT%H:%M:%SZ"), "source": row.source})
 
 
 HF_URL = "https://huggingface.co"

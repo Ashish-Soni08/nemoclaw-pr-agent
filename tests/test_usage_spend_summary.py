@@ -231,33 +231,30 @@ def test_huggingface_bill_comes_from_its_usage_endpoint():
 
 
 def test_guard_counts_hf_bill_when_it_beats_the_estimate(tmp_path):
-    from pr_agent.spend import huggingface, last_billed
-    tsv = tmp_path / "spend.tsv"
-    tsv.write_text("ts\tprovider\tused\tunit\tcost_usd\tremaining\tlimit\tsource\n"
-                   "2026-09-30T23:55:00Z\thuggingface\t390\tusd\t390\t10\t400\tapi:/api/settings/billing/usage-v2 inferenceProviders\n"
-                   "2026-10-10T14:10:00Z\thuggingface\t239.84\tusd\t239.84\t160.16\t400\tapi:/api/settings/billing/usage-v2 inferenceProviders\n"
-                   "2026-10-10T14:11:00Z\thuggingface\t111.71\tusd\t111.71\t288.29\t400\testimate:hermes-state.db tokens\n")
+    from pr_agent.spend import SpendRow, huggingface, last_billed, write_billed
+    path = tmp_path / "billed" / "huggingface.json"
     now = datetime(2026, 10, 10, 15, tzinfo=timezone.utc)
-    # The newest bill this month, never our own estimate rows or last month's bill.
-    assert last_billed(tsv, now) == 239.84
-    assert last_billed(tsv, datetime(2026, 11, 1, 1, tzinfo=timezone.utc)) is None
-    assert last_billed(tmp_path / "missing.tsv", now) is None
+    assert last_billed(path, now) is None
+    write_billed(path, SpendRow("huggingface", 239.84, "usd", 239.84, 160.16, 400, "api:billing"), now=now)
+    assert last_billed(path, now) == 239.84
+    # Last month's bill says nothing about this month.
+    assert last_billed(path, datetime(2026, 11, 1, 1, tzinfo=timezone.utc)) is None
+    path.write_text("not json")
+    assert last_billed(path, now) is None
     assert huggingface(239.84, 400, billed=True).source.startswith("billed:")
 
 
 def test_app_guard_takes_the_higher_of_bill_and_estimate(tmp_path, monkeypatch):
     from types import SimpleNamespace
     from pr_agent.cli import App
+    from pr_agent.spend import SpendRow, write_billed
     monkeypatch.setenv("HERMES_HOME", str(tmp_path))
-    (tmp_path / "ledger").mkdir()
-    month = datetime.now(timezone.utc).strftime("%Y-%m")
-    tsv = tmp_path / "ledger" / "spend.tsv"
-    tsv.write_text("ts\tprovider\tused\tunit\tcost_usd\tremaining\tlimit\tsource\n"
-                   f"{month}-01T00:05:00Z\thuggingface\t400\tusd\t400\t0\t400\tapi:billing\n")
-    app = SimpleNamespace(s=SimpleNamespace(agent={"usage": {"monthly_budget_usd": 400, "daily_budget_usd": 0}}, ledger_dir=tmp_path / "ledger"))
+    bill = tmp_path / "billed" / "huggingface.json"
+    write_billed(bill, SpendRow("huggingface", 400, "usd", 400, 0, 400, "api:billing"))
+    app = SimpleNamespace(s=SimpleNamespace(agent={"usage": {"monthly_budget_usd": 400, "daily_budget_usd": 0}}, home=tmp_path))
     g = App.guard(app)
     assert (g.month_usd, g.billed) == (400, True) and g.over.startswith("monthly budget used")
-    tsv.write_text(tsv.read_text().replace("\t400\tusd\t400\t0", "\t0.01\tusd\t0.01\t399.99"))
+    write_billed(bill, SpendRow("huggingface", 0.01, "usd", 0.01, 399.99, 400, "api:billing"))
     state_db(tmp_path / "state.db", [("s", "nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-FP8", datetime.now(timezone.utc).timestamp(), 1_000_000, 0)])
     app.s.agent["models"] = [{"id": "nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-FP8", "price_in": 0.5, "price_out": 1.5}]
     g = App.guard(app)

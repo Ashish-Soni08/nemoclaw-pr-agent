@@ -23,7 +23,7 @@ from .http import HttpError
 from .ledger import Ledger, append_tsv, sync_to_dataset
 from .publish import Refused, Registry, ack_comments, check_changes, claim_updates, current_parent, gated_tree, latest_feedback, objected, open_pr, post_claim, pr_updates, record_gate, reply_guard, signoff_for, utcnow
 from .state import CreditBook, SeenStore, read_json, write_json
-from .spend import append as append_spend, append_tokens, huggingface_billed, last_billed, snapshot as spend_snapshot
+from .spend import append as append_spend, append_tokens, huggingface_billed, last_billed, snapshot as spend_snapshot, write_billed
 from .summary import compact_candidates, daily_digest, run_summary
 from .usage import menu, report, router_models
 from .jail import IsolationUnavailable
@@ -112,8 +112,8 @@ class App:
         u = self.s.agent.get("usage", {})
         hermes_home = Path(os.environ.get("HERMES_HOME", Path.home() / ".hermes"))
         r = report(hermes_home / "state.db", menu(self.s.agent), u.get("monthly_budget_usd", 20), u.get("daily_budget_usd", 3), served_model=u.get("served_model", ""))
-        # The budget counts whichever is higher: our token estimate, or HF's own bill as last synced.
-        billed = last_billed(self.s.ledger_dir / "spend.tsv")
+        # The budget counts whichever is higher: our token estimate, or HF's own bill as the host last saw it.
+        billed = last_billed(self.s.home / "billed" / "huggingface.json")
         return replace(r, month_usd=billed, billed=True) if billed is not None and billed > r.month_usd else r
 
     def spend(self, hf_month_usd: float | None = None, hf_billed: bool = False) -> list[Any]:
@@ -630,6 +630,7 @@ def dispatch(app: App, a: argparse.Namespace) -> int:  # noqa: C901 - flat comma
             billed = huggingface_billed(token, app.s.agent.get("usage", {}).get("monthly_budget_usd", 20)) if token else None
             if billed:
                 append_spend(app.s.ledger_dir / "spend.tsv", [billed])
+                write_billed(app.s.home / "billed" / "huggingface.json", billed)
             out({"synced_to": sync_to_dataset(app.s.ledger_dir, repo, token), "hf_billed_usd": billed.cost_usd if billed else None})
     return 0
 
