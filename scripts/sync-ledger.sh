@@ -18,3 +18,7 @@ nemohermes "$SANDBOX" download /sandbox/.pr-agent/ledger "$MIRROR/ledger/"
 "$MIRROR/.venv/bin/pip" install --quiet "huggingface_hub>=1.0" pyyaml
 export PATH="$MIRROR/.venv/bin:$PATH"
 PR_AGENT_HOME="$MIRROR" "$REPO_DIR/bin/pr-agent" ledger sync
+# Hand HF's bill back to the sandbox, which has no billing token, so the budget guard counts it.
+if [[ -f "$MIRROR/billed/huggingface.json" ]]; then
+  nemohermes "$SANDBOX" upload "$MIRROR/billed" /sandbox/.pr-agent/ || echo "could not upload the HF bill to the sandbox" >&2
+fi

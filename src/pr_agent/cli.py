@@ -9,6 +9,7 @@ import os
 import secrets
 import subprocess
 import sys
+from dataclasses import replace
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -22,7 +23,7 @@ from .http import HttpError
 from .ledger import Ledger, append_tsv, sync_to_dataset
 from .publish import Refused, Registry, ack_comments, check_changes, claim_updates, current_parent, gated_tree, latest_feedback, objected, open_pr, post_claim, pr_updates, record_gate, reply_guard, signoff_for, utcnow
 from .state import CreditBook, SeenStore, read_json, write_json
-from .spend import append as append_spend, append_tokens, huggingface_billed, snapshot as spend_snapshot
+from .spend import append as append_spend, append_tokens, huggingface_billed, last_billed, snapshot as spend_snapshot, write_billed
 from .summary import compact_candidates, daily_digest, run_summary
 from .usage import menu, report, router_models
 from .jail import IsolationUnavailable
@@ -110,13 +111,17 @@ class App:
     def guard(self) -> Any:
         u = self.s.agent.get("usage", {})
         hermes_home = Path(os.environ.get("HERMES_HOME", Path.home() / ".hermes"))
-        return report(hermes_home / "state.db", menu(self.s.agent), u.get("monthly_budget_usd", 20), u.get("daily_budget_usd", 3), served_model=u.get("served_model", ""))
+        r = report(hermes_home / "state.db", menu(self.s.agent), u.get("monthly_budget_usd", 20), u.get("daily_budget_usd", 3), served_model=u.get("served_model", ""))
+        # The budget counts whichever is higher: our token estimate, or HF's own bill as the host last saw it.
+        billed = last_billed(self.s.home / "billed" / "huggingface.json")
+        return replace(r, month_usd=billed, billed=True) if billed is not None and billed > r.month_usd else r
 
-    def spend(self, hf_month_usd: float | None = None) -> list[Any]:
+    def spend(self, hf_month_usd: float | None = None, hf_billed: bool = False) -> list[Any]:
         if hf_month_usd is None:
-            hf_month_usd = self.guard().month_usd
+            g = self.guard()
+            hf_month_usd, hf_billed = g.month_usd, g.billed
         key = os.environ.get("PRAGENT_FIRECRAWL_KEY") or os.environ.get("FIRECRAWL_API_KEY", "")
-        return spend_snapshot(self.s.state_dir, self.s.ledger_dir, self.s.agent, hf_month_usd, key)
+        return spend_snapshot(self.s.state_dir, self.s.ledger_dir, self.s.agent, hf_month_usd, key, hf_billed)
 
     def ledger_url(self, for_summary: bool = False) -> str:
         led = self.s.agent.get("ledger", {})
@@ -578,7 +583,7 @@ def dispatch(app: App, a: argparse.Namespace) -> int:  # noqa: C901 - flat comma
         if a.scmd == "run":
             g = app.guard()
             run = a.run or app.run_id
-            budgets = {r.provider: r for r in app.spend(g.month_usd)}
+            budgets = {r.provider: r for r in app.spend(g.month_usd, g.billed)}
             usage = f"${g.month_usd:.2f} / ${g.month_budget:.0f} HF"
             if "firecrawl" in budgets:
                 fc = budgets["firecrawl"]
@@ -588,7 +593,7 @@ def dispatch(app: App, a: argparse.Namespace) -> int:  # noqa: C901 - flat comma
             app.ledger.log("run.end", run, "sent run summary", "end of run", "telegram", "done")
         else:
             g = app.guard()
-            left = {r.provider: r for r in app.spend(g.month_usd)}
+            left = {r.provider: r for r in app.spend(g.month_usd, g.billed)}
             parts = []
             if "huggingface" in left:
                 parts.append(f"${left['huggingface'].remaining:,.0f} HF")
@@ -625,6 +630,7 @@ def dispatch(app: App, a: argparse.Namespace) -> int:  # noqa: C901 - flat comma
             billed = huggingface_billed(token, app.s.agent.get("usage", {}).get("monthly_budget_usd", 20)) if token else None
             if billed:
                 append_spend(app.s.ledger_dir / "spend.tsv", [billed])
+                write_billed(app.s.home / "billed" / "huggingface.json", billed)
             out({"synced_to": sync_to_dataset(app.s.ledger_dir, repo, token), "hf_billed_usd": billed.cost_usd if billed else None})
     return 0
 
