@@ -181,5 +181,5 @@ def daily_digest(rows: list[dict[str, str]], registry: Registry, day: str, spend
 
 
 def compact_candidates(cands: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    keep = ("issue_id", "url", "title", "lane_hint", "policy", "claim_required", "track", "ambiguous_claims", "taken_by", "max_open_prs", "precedent_prs")
+    keep = ("issue_id", "url", "title", "lane_hint", "policy", "claim_required", "track", "ambiguous_claims", "taken_by", "max_open_prs", "open_prs", "precedent_prs")
     return [{k: c.get(k) for k in keep if c.get(k) not in (None, [], "")} | {"labels": c["github"]["labels"]} for c in cands]

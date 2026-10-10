@@ -182,10 +182,14 @@ class App:
             v = self.policy(c["repo"], gh, index)
             c["policy"] = v.verdict
             c["claim_required"] = v.claim_required
+            # The cap `pr open` enforces, and how much of it is used, so triage doesn't build a fix
+            # that can't be opened (hermes-agent, 2026-10-09: gated fixes sat parked behind a cap of 1).
+            c["max_open_prs"] = int(self.s.agent.get("limits", {}).get("max_open_prs_per_repo", 1))
+            c["open_prs"] = len(self.registry.open_in_repo(c["repo"]))
             if pin := self.pin(c["repo"]):
                 c["track"] = pin.get("rules", "")
                 if pin.get("max_open_prs"):
-                    c["max_open_prs"] = pin["max_open_prs"]
+                    c["max_open_prs"] = int(pin["max_open_prs"])
             if v.claim_required:
                 c["lane_hint"] = "ask-first"
             self.ledger.log("policy", c["repo"], f"AI policy {v.verdict}", "; ".join(v.matches[:2]) or "no AI policy text found", ", ".join(v.files[:4]) or "-", v.verdict)
